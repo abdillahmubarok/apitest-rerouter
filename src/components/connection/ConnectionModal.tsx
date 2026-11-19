@@ -15,6 +15,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { RerouterLogo } from '@/components/brand/RerouterLogo';
+import { SEO_CONFIG } from '@/config/seo';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -116,7 +117,10 @@ export function ConnectionModal() {
         <div className="p-5 space-y-4">
           <DialogHeader className="space-y-2">
             <div className="flex items-center justify-between gap-3">
-              <RerouterLogo size="lg" subtitle="Public BYOK API Playground" />
+              <RerouterLogo
+                size="lg"
+                subtitle={SEO_CONFIG.branding.modalSubtitle}
+              />
               {renderStateBadge()}
             </div>
             <DialogTitle className="text-sm font-semibold pt-1">

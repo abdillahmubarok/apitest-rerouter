@@ -2,10 +2,10 @@
 
 import React, { useState } from 'react';
 import Image from 'next/image';
+import { SEO_CONFIG } from '@/config/seo';
 import { cn } from '@/lib/utils';
 
-export const OFFICIAL_REROUTER_LOGO_URL =
-  'https://storage-mubarokah.s3.ap-southeast-3.amazonaws.com/rerouter/rerouter_mark.svg';
+export const OFFICIAL_REROUTER_LOGO_URL = SEO_CONFIG.branding.logoSvgPath;
 
 interface RerouterLogoProps {
   size?: 'sm' | 'md' | 'lg';
@@ -28,34 +28,51 @@ export function RerouterLogo({
   className,
   wordmarkClassName,
 }: RerouterLogoProps) {
-  const [failedToLoad, setFailedToLoad] = useState(false);
+  const [useInlineFallback, setUseInlineFallback] = useState(false);
   const spec = LOGO_DIMENSIONS[size];
 
   return (
     <div className={cn('inline-flex items-center gap-2 shrink-0', className)}>
-      {!failedToLoad ? (
-        <div
-          className={cn(
-            'relative flex items-center justify-center shrink-0',
-            spec.container
-          )}
-        >
+      <div
+        className={cn(
+          'relative flex items-center justify-center shrink-0',
+          spec.container
+        )}
+      >
+        {!useInlineFallback ? (
           <Image
             src={OFFICIAL_REROUTER_LOGO_URL}
-            alt="ReRouter Official Brand Logo"
+            alt={SEO_CONFIG.branding.logoAlt}
             width={spec.px}
             height={spec.px}
+            priority
             unoptimized
-            onError={() => setFailedToLoad(true)}
+            onError={() => setUseInlineFallback(true)}
             className="h-full w-full object-contain"
             style={{ objectFit: 'contain' }}
           />
-        </div>
-      ) : (
-        <span className="inline-flex items-center justify-center rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] font-semibold text-foreground shrink-0">
-          ReRouter
-        </span>
-      )}
+        ) : (
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 64 64"
+            role="img"
+            aria-label={SEO_CONFIG.branding.logoAlt}
+            className="h-full w-full"
+          >
+            <rect width="64" height="64" rx="18" fill="#F0EEFF" />
+            <path
+              d="M18 49V15H34C43 15 48 20 48 29C48 38 43 43 34 43H18M33 43L49 53"
+              fill="none"
+              stroke="#5B4CE6"
+              strokeWidth="6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <circle cx="18" cy="15" r="4" fill="#087B76" />
+            <circle cx="49" cy="53" r="4" fill="#087B76" />
+          </svg>
+        )}
+      </div>
 
       {showWordmark && (
         <div className="flex flex-col leading-tight">
@@ -66,7 +83,7 @@ export function RerouterLogo({
               wordmarkClassName
             )}
           >
-            ReRouter
+            {SEO_CONFIG.branding.brandName}
           </span>
           {subtitle && (
             <span className="font-mono text-[10px] text-muted-foreground">

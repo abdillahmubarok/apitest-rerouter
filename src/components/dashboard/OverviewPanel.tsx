@@ -12,6 +12,7 @@ import {
   RefreshCw,
   ShieldCheck,
 } from 'lucide-react';
+import { RerouterLogo } from '@/components/brand/RerouterLogo';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -212,15 +213,22 @@ export function OverviewPanel({
       <div className="rounded-md border border-border bg-card overflow-hidden">
         {/* Top Controls Header */}
         <div className="p-4 border-b border-border bg-muted/20 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">
-              Live Verification & Telemetry Overview
-            </h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              All metrics are populated strictly from live HTTP responses
-              executed during your current in-memory session via same-origin
-              Next.js Route Handlers.
-            </p>
+          <div className="flex items-start gap-2.5">
+            <RerouterLogo
+              size="md"
+              showWordmark={false}
+              className="mt-0.5"
+            />
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">
+                Live Verification & Telemetry Overview
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                All metrics are populated strictly from live HTTP responses
+                executed during your current in-memory session via same-origin
+                Next.js Route Handlers.
+              </p>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">

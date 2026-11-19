@@ -33,6 +33,7 @@ import {
 import { CreditTruncationPanel } from './CreditTruncationPanel';
 import { OverviewPanel } from './OverviewPanel';
 import { RerouterLogo } from '@/components/brand/RerouterLogo';
+import { SEO_CONFIG } from '@/config/seo';
 import { BillingRedirectModal } from '@/components/connection/BillingRedirectModal';
 import { ConnectionModal } from '@/components/connection/ConnectionModal';
 import { EndpointTestPanel } from '@/components/endpoint-tester/EndpointTestPanel';
@@ -639,7 +640,10 @@ function RerouterInspectorWorkspace() {
       {/* Top Sidebar Branding */}
       <div>
         <div className="flex items-center justify-between px-3.5 py-3 border-b border-sidebar-border">
-          <RerouterLogo size="md" subtitle="API Playground" />
+          <RerouterLogo
+            size="md"
+            subtitle={SEO_CONFIG.branding.sidebarSubtitle}
+          />
           <Badge variant="outline" className="text-[10px] px-1.5 py-0">
             BYOK
           </Badge>

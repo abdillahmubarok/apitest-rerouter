@@ -1,5 +1,11 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
+import {
+  SEO_CONFIG,
+  buildNextMetadata,
+  buildNextViewport,
+  buildStructuredDataJsonLd,
+} from '@/config/seo';
 import { RerouterSessionProvider } from '@/context/RerouterSessionContext';
 import './globals.css';
 
@@ -13,30 +19,26 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 });
 
-export const metadata: Metadata = {
-  title: 'ReRouter API Playground — Live Verification & Endpoint Testing',
-  description:
-    'Public Bring Your Own API Key (BYOK) developer playground, model catalog explorer, SSE stream inspector, and error schema verifier for ReRouter by Mubarokah Digital.',
-  icons: {
-    icon: [
-      {
-        url: 'https://storage-mubarokah.s3.ap-southeast-3.amazonaws.com/rerouter/rerouter_mark.svg',
-        type: 'image/svg+xml',
-      },
-    ],
-    shortcut:
-      'https://storage-mubarokah.s3.ap-southeast-3.amazonaws.com/rerouter/rerouter_mark.svg',
-  },
-};
+export const metadata: Metadata = buildNextMetadata(SEO_CONFIG);
+
+export const viewport: Viewport = buildNextViewport(SEO_CONFIG);
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {
+  const structuredData = buildStructuredDataJsonLd(SEO_CONFIG);
+
   return (
     <html
-      lang="en"
+      lang={SEO_CONFIG.language}
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(structuredData),
+          }}
+        />
         <RerouterSessionProvider>{children}</RerouterSessionProvider>
       </body>
     </html>
