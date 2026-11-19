@@ -1,6 +1,18 @@
 'use client';
 
 import React from 'react';
+import { AlertTriangle, CreditCard, ExternalLink } from 'lucide-react';
+import { RerouterLogo } from '@/components/brand/RerouterLogo';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+import { HttpStatusBadge } from '@/components/ui/http-badge';
 import {
   OFFICIAL_BILLING_URL,
   useRerouterSession,
@@ -14,75 +26,68 @@ export function BillingRedirectModal() {
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-sm p-4"
-      role="alertdialog"
-      aria-modal="true"
-      aria-labelledby="rerouter-billing-redirect-title"
-    >
-      <div className="w-full max-w-lg rounded-2xl border border-amber-700 bg-slate-900 shadow-2xl p-6 space-y-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-300 text-lg font-bold shrink-0">
-              💳
-            </div>
-            <div>
-              <h3
-                id="rerouter-billing-redirect-title"
-                className="text-base font-bold text-white"
-              >
-                Insufficient ReRouter Credit Balance (HTTP{' '}
-                {billingAlert.httpStatus})
-              </h3>
-              <p className="text-xs text-amber-300 font-mono">
-                Authoritative empty-balance or credit-limit signal received
-              </p>
-            </div>
+    <AlertDialog open={Boolean(billingAlert)}>
+      <AlertDialogContent>
+        <AlertDialogHeader className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <RerouterLogo size="sm" />
+            <HttpStatusBadge
+              status={billingAlert.httpStatus}
+              statusText="Payment Required"
+            />
           </div>
-        </div>
+          <AlertDialogTitle className="flex items-center gap-2 text-base pt-1">
+            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span>
+              Insufficient ReRouter Credit Balance (HTTP{' '}
+              {billingAlert.httpStatus})
+            </span>
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            Authoritative empty-balance or credit-limit signal received from
+            upstream API gateway.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
 
-        <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5 text-xs font-mono">
-          <div className="text-slate-400">
+        <div className="rounded-md border border-border bg-muted/40 p-3 space-y-1.5 font-mono text-xs">
+          <div className="text-muted-foreground">
             Endpoint:{' '}
-            <span className="text-sky-400 break-all">
+            <span className="text-foreground break-all">
               {billingAlert.endpointUrl}
             </span>
           </div>
-          <div className="text-slate-400">
+          <div className="text-muted-foreground">
             Upstream Message:{' '}
-            <span className="text-amber-200">
+            <span className="text-amber-700 dark:text-amber-300">
               {billingAlert.readableMessage}
             </span>
           </div>
         </div>
 
-        <p className="text-xs text-slate-300 leading-relaxed">
+        <p className="text-xs text-muted-foreground leading-relaxed">
           ReRouter returned an authoritative{' '}
-          <code className="font-mono text-amber-300">
+          <code className="font-mono text-foreground">
             HTTP {billingAlert.httpStatus} Payment Required
           </code>{' '}
           response indicating that your account has no available balance or your
-          API key has reached its configured credit limit. Redirecting you to
-          the official ReRouter Billing portal (no API key or request data is
+          API key has reached its configured credit limit. Redirecting to the
+          official ReRouter Billing portal (no API key or request payload is
           included in the redirect URL).
         </p>
 
-        <div className="flex flex-wrap items-center justify-end gap-2.5 pt-2">
-          <button
-            type="button"
-            onClick={dismissBillingAlert}
-            className="px-3.5 py-2 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
-          >
+        <AlertDialogFooter>
+          <Button variant="outline" size="sm" onClick={dismissBillingAlert}>
             Stay on Playground
-          </button>
-          <a
-            href={OFFICIAL_BILLING_URL}
-            className="px-4 py-2 rounded-lg text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors"
-          >
-            Go to ReRouter Billing Now →
-          </a>
-        </div>
-      </div>
-    </div>
+          </Button>
+          <Button asChild size="sm">
+            <a href={OFFICIAL_BILLING_URL}>
+              <CreditCard className="h-3.5 w-3.5" />
+              <span>Go to ReRouter Billing Now</span>
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

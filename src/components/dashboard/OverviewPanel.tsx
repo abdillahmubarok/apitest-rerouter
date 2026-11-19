@@ -2,6 +2,32 @@
 
 import React from 'react';
 import {
+  ArrowRight,
+  BookOpen,
+  CreditCard,
+  ExternalLink,
+  Loader2,
+  LogOut,
+  Play,
+  RefreshCw,
+  ShieldCheck,
+} from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  CategoryBadge,
+  HttpMethodBadge,
+  HttpStatusBadge,
+} from '@/components/ui/http-badge';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
   OFFICIAL_BILLING_URL,
   OFFICIAL_DOCS_URL,
   useRerouterSession,
@@ -59,30 +85,28 @@ export function OverviewPanel({
   const latestWithCost =
     testResults.find((r) => r.usageAndCost.costValue !== null) ?? null;
 
-  // Derive connection status strictly from live API responses
   let connectionStatusLabel = `STATE: ${connectionState}`;
-  let connectionStatusColor = 'text-slate-400';
+  let connectionStatusColor = 'text-muted-foreground';
   if (isConnected && lastSuccessfulRequest) {
     connectionStatusLabel = `CONNECTED (${lastSuccessfulRequest.method} ${lastSuccessfulRequest.exactUrl.replace(
       'https://rerouter.mubarokah.com',
       ''
     )} → HTTP ${lastSuccessfulRequest.httpStatus})`;
-    connectionStatusColor = 'text-emerald-400';
+    connectionStatusColor = 'text-emerald-700 dark:text-emerald-400';
   } else if (isConnected) {
     connectionStatusLabel =
       'CONNECTED (Verified via POST /v1/messages/count_tokens)';
-    connectionStatusColor = 'text-emerald-400';
+    connectionStatusColor = 'text-emerald-700 dark:text-emerald-400';
   } else if (latestResult && latestResult.httpStatus > 0) {
     connectionStatusLabel = `REACHABLE (HTTP ${latestResult.httpStatus})`;
-    connectionStatusColor = 'text-amber-300';
+    connectionStatusColor = 'text-amber-700 dark:text-amber-400';
   } else if (latestResult && latestResult.httpStatus === 0) {
     connectionStatusLabel = `CONNECTION ERROR (${
       latestResult.networkError || 'Network unreachable'
     })`;
-    connectionStatusColor = 'text-rose-400';
+    connectionStatusColor = 'text-red-700 dark:text-red-400';
   }
 
-  // Derive authentication status strictly from authenticated endpoint responses
   const authenticatedEndpointResults = testResults.filter(
     (r) =>
       r.endpointId !== 'models' &&
@@ -97,328 +121,379 @@ export function OverviewPanel({
   let authStatusLabel = isConnected
     ? 'VERIFIED (Non-billable POST /v1/messages/count_tokens)'
     : 'NOT CONNECTED (Enter your ReRouter API key)';
-  let authStatusColor = isConnected ? 'text-emerald-400' : 'text-amber-400';
+  let authStatusColor = isConnected
+    ? 'text-emerald-700 dark:text-emerald-400'
+    : 'text-amber-700 dark:text-amber-400';
   if (verifiedAuthSuccess) {
     authStatusLabel = `VERIFIED (HTTP ${verifiedAuthSuccess.httpStatus} on ${verifiedAuthSuccess.label})`;
-    authStatusColor = 'text-emerald-400';
+    authStatusColor = 'text-emerald-700 dark:text-emerald-400';
   } else if (authRejected) {
     authStatusLabel = `REJECTED (HTTP ${authRejected.httpStatus}: ${
       authRejected.errorAnalysis?.readableMessage || 'Authentication failed'
     })`;
-    authStatusColor = 'text-rose-400';
+    authStatusColor = 'text-red-700 dark:text-red-400';
   }
 
   return (
-    <div className="space-y-6">
-      {/* BYOK Session & Balance Transparency Banner */}
-      <div className="rounded-xl border border-indigo-800/70 bg-indigo-950/25 p-4 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
-            <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700 font-bold">
-              {isConnected ? '● BYOK SESSION ACTIVE' : '○ NOT CONNECTED'}
-            </span>
-            <span className="px-2 py-0.5 rounded bg-slate-900 text-sky-300 border border-slate-800">
-              Storage: React In-Memory Only (No DB / No Persistent Browser Storage)
-            </span>
-            <span className="px-2 py-0.5 rounded bg-slate-900 text-amber-300 border border-slate-800">
+    <div className="space-y-4">
+      {/* BYOK Session & Balance Transparency Bar */}
+      <div className="rounded-md border border-border bg-card p-3.5 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
+            <Badge variant={isConnected ? 'success' : 'warning'}>
+              <ShieldCheck className="h-3 w-3" />
+              <span>
+                {isConnected ? 'BYOK SESSION ACTIVE' : 'NOT CONNECTED'}
+              </span>
+            </Badge>
+            <Badge variant="secondary">
+              Storage: React In-Memory Only (No DB / No Browser Storage)
+            </Badge>
+            <Badge
+              variant={
+                balanceState === 'BALANCE_EMPTY' ? 'destructive' : 'outline'
+              }
+            >
               Balance:{' '}
               {balanceState === 'BALANCE_EMPTY'
                 ? 'EMPTY (HTTP 402)'
                 : 'UNKNOWN / NOT AVAILABLE'}
-            </span>
+            </Badge>
             {lastVerifiedAt && (
-              <span className="text-slate-400">
+              <span className="text-[11px] text-muted-foreground">
                 Verified at {new Date(lastVerifiedAt).toLocaleTimeString()}
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-300 leading-relaxed pt-0.5">
+          <p className="text-xs text-muted-foreground leading-relaxed">
             {balanceNote}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
-          <a
-            href={OFFICIAL_DOCS_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-sky-400 border border-slate-700 transition-colors"
-          >
-            📖 Official Docs ↗
-          </a>
-          <a
-            href={OFFICIAL_BILLING_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-slate-700 transition-colors"
-          >
-            💳 ReRouter Billing ↗
-          </a>
-          {isConnected && (
-            <button
-              type="button"
-              onClick={() => disconnect()}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-950 hover:bg-rose-900 text-rose-200 border border-rose-800 transition-colors"
+          <Button asChild variant="outline" size="sm">
+            <a
+              href={OFFICIAL_DOCS_URL}
+              target="_blank"
+              rel="noopener noreferrer"
             >
-              Disconnect Session
-            </button>
+              <BookOpen className="h-3.5 w-3.5" />
+              <span>Official Docs</span>
+              <ExternalLink className="h-3 w-3 opacity-60" />
+            </a>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <a
+              href={OFFICIAL_BILLING_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <CreditCard className="h-3.5 w-3.5" />
+              <span>ReRouter Billing</span>
+              <ExternalLink className="h-3 w-3 opacity-60" />
+            </a>
+          </Button>
+          {isConnected && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => disconnect()}
+              className="hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              <span>Disconnect Session</span>
+            </Button>
           )}
         </div>
       </div>
 
-      {/* Top Controls Bar */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 flex flex-wrap items-center justify-between gap-4">
-        <div className="space-y-1">
-          <h2 className="text-base font-bold text-slate-100">
-            ReRouter API Playground — Live Verification & Telemetry Overview
-          </h2>
-          <p className="text-xs text-slate-400">
-            All metrics below are populated strictly from live HTTP responses
-            executed during your current in-memory session via same-origin
-            Next.js Route Handlers.
-          </p>
-        </div>
+      {/* Main Telemetry & Controls Workbench Container */}
+      <div className="rounded-md border border-border bg-card overflow-hidden">
+        {/* Top Controls Header */}
+        <div className="p-4 border-b border-border bg-muted/20 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">
+              Live Verification & Telemetry Overview
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              All metrics are populated strictly from live HTTP responses
+              executed during your current in-memory session via same-origin
+              Next.js Route Handlers.
+            </p>
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1.5 rounded-lg border border-slate-800">
-            <span className="text-xs text-slate-400">Default Auth:</span>
-            <button
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center gap-1 rounded-md border border-border bg-background p-0.5">
+              <span className="px-2 text-[11px] text-muted-foreground">
+                Default Auth:
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                variant={activeAuthFormat === 'bearer' ? 'default' : 'ghost'}
+                onClick={() => onChangeAuthFormat('bearer')}
+                className="h-6 px-2 font-mono text-[11px]"
+              >
+                Authorization: Bearer
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={
+                  activeAuthFormat === 'x-api-key' ? 'default' : 'ghost'
+                }
+                onClick={() => onChangeAuthFormat('x-api-key')}
+                className="h-6 px-2 font-mono text-[11px]"
+              >
+                x-api-key
+              </Button>
+            </div>
+
+            <Button
               type="button"
-              onClick={() => onChangeAuthFormat('bearer')}
-              className={`px-2 py-1 rounded text-xs font-mono transition-colors ${
-                activeAuthFormat === 'bearer'
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
+              variant="outline"
+              size="sm"
+              onClick={onRefreshModels}
+              disabled={isLoading}
             >
-              Authorization: Bearer
-            </button>
-            <button
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`}
+              />
+              <span>Refresh GET /v1/models</span>
+            </Button>
+
+            <Button
               type="button"
-              onClick={() => onChangeAuthFormat('x-api-key')}
-              className={`px-2 py-1 rounded text-xs font-mono transition-colors ${
-                activeAuthFormat === 'x-api-key'
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
+              size="sm"
+              onClick={onRunSafeSuite}
+              disabled={isLoading}
             >
-              x-api-key
-            </button>
-          </div>
-
-          <button
-            type="button"
-            onClick={onRefreshModels}
-            disabled={isLoading}
-            className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 transition-colors disabled:opacity-50"
-          >
-            {isLoading ? 'Running...' : 'Refresh GET /v1/models'}
-          </button>
-
-          <button
-            type="button"
-            onClick={onRunSafeSuite}
-            disabled={isLoading}
-            className="px-4 py-2 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors disabled:opacity-50"
-          >
-            {isLoading
-              ? 'Executing Safe Tests...'
-              : '▶ Run All Category A Safe Tests'}
-          </button>
-        </div>
-      </div>
-
-      {/* 10 Mandatory Dashboard Metrics Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-        <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60">
-          <div className="text-xs text-slate-400 uppercase tracking-wider">
-            1. Connection Status
-          </div>
-          <div
-            className={`text-xs font-mono font-semibold mt-1.5 leading-snug ${connectionStatusColor}`}
-          >
-            {connectionStatusLabel}
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>Executing Safe Tests...</span>
+                </>
+              ) : (
+                <>
+                  <Play className="h-3.5 w-3.5" />
+                  <span>Run All Category A Safe Tests</span>
+                </>
+              )}
+            </Button>
           </div>
         </div>
 
-        <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60">
-          <div className="text-xs text-slate-400 uppercase tracking-wider">
-            2. API Authentication Status
-          </div>
-          <div
-            className={`text-xs font-mono font-semibold mt-1.5 leading-snug ${authStatusColor}`}
-          >
-            {authStatusLabel}
-          </div>
-        </div>
-
-        <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60">
-          <div className="text-xs text-slate-400 uppercase tracking-wider">
-            3. Base URL
-          </div>
-          <div className="text-xs font-mono text-sky-400 mt-1.5 break-all">
-            {configStatus?.baseUrl ?? 'https://rerouter.mubarokah.com/v1'}
-          </div>
-        </div>
-
-        <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60">
-          <div className="text-xs text-slate-400 uppercase tracking-wider">
-            4. BYOK In-Memory Session Key
-          </div>
-          <div className="mt-1.5 flex items-center gap-2">
-            <span
-              className={`px-2 py-0.5 text-xs font-mono font-bold rounded ${
-                isConnected
-                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-700'
-                  : 'bg-amber-950 text-amber-300 border border-amber-700'
-              }`}
+        {/* 10 Mandatory Dashboard Metrics Divided Grid (No nested cards) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-border border-b border-border">
+          <div className="p-3.5">
+            <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              1. Connection Status
+            </div>
+            <div
+              className={`font-mono text-xs font-medium mt-1 leading-snug ${connectionStatusColor}`}
             >
-              {isConnected ? 'Active' : 'Disconnected'}
-            </span>
-            <span className="text-[11px] text-slate-400 truncate">
-              (in-memory only)
-            </span>
+              {connectionStatusLabel}
+            </div>
           </div>
-        </div>
 
-        <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60">
-          <div className="text-xs text-slate-400 uppercase tracking-wider">
-            5. Last Successful Request
+          <div className="p-3.5">
+            <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              2. API Authentication Status
+            </div>
+            <div
+              className={`font-mono text-xs font-medium mt-1 leading-snug ${authStatusColor}`}
+            >
+              {authStatusLabel}
+            </div>
           </div>
-          <div className="text-xs font-mono text-slate-200 mt-1.5">
-            {lastSuccessfulRequest ? (
-              <div>
-                <div className="text-emerald-400 truncate">
-                  {lastSuccessfulRequest.method}{' '}
-                  {lastSuccessfulRequest.exactUrl.replace(
-                    'https://rerouter.mubarokah.com',
-                    ''
-                  )}
+
+          <div className="p-3.5">
+            <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              3. Base URL
+            </div>
+            <div className="font-mono text-xs text-sky-700 dark:text-sky-400 mt-1 break-all">
+              {configStatus?.baseUrl ?? 'https://rerouter.mubarokah.com/v1'}
+            </div>
+          </div>
+
+          <div className="p-3.5">
+            <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              4. BYOK In-Memory Key
+            </div>
+            <div className="mt-1 flex items-center gap-1.5">
+              <Badge variant={isConnected ? 'success' : 'warning'}>
+                {isConnected ? 'Active' : 'Disconnected'}
+              </Badge>
+              <span className="text-[11px] text-muted-foreground truncate">
+                in-memory only
+              </span>
+            </div>
+          </div>
+
+          <div className="p-3.5">
+            <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              5. Last Successful Request
+            </div>
+            <div className="font-mono text-xs text-foreground mt-1">
+              {lastSuccessfulRequest ? (
+                <div>
+                  <div className="text-emerald-700 dark:text-emerald-400 truncate">
+                    {lastSuccessfulRequest.method}{' '}
+                    {lastSuccessfulRequest.exactUrl.replace(
+                      'https://rerouter.mubarokah.com',
+                      ''
+                    )}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">
+                    {new Date(
+                      lastSuccessfulRequest.timestamp
+                    ).toLocaleTimeString()}{' '}
+                    ({lastSuccessfulRequest.durationMs} ms)
+                  </div>
                 </div>
-                <div className="text-[11px] text-slate-400">
-                  {new Date(
-                    lastSuccessfulRequest.timestamp
-                  ).toLocaleTimeString()}{' '}
-                  ({lastSuccessfulRequest.durationMs} ms)
-                </div>
-              </div>
-            ) : (
-              'None observed yet'
-            )}
+              ) : (
+                <span className="text-muted-foreground">None observed yet</span>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60">
-          <div className="text-xs text-slate-400 uppercase tracking-wider">
-            6. Total Tests Executed
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-border">
+          <div className="p-3.5">
+            <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              6. Total Tests Executed
+            </div>
+            <div className="font-mono text-xl font-semibold text-foreground mt-1">
+              {totalTests}
+            </div>
           </div>
-          <div className="text-2xl font-mono font-bold text-slate-100 mt-1">
-            {totalTests}
-          </div>
-        </div>
 
-        <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60">
-          <div className="text-xs text-slate-400 uppercase tracking-wider">
-            7. Successful Tests (2xx)
+          <div className="p-3.5">
+            <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              7. Successful Tests (2xx)
+            </div>
+            <div className="font-mono text-xl font-semibold text-emerald-700 dark:text-emerald-400 mt-1">
+              {successfulTests}
+            </div>
           </div>
-          <div className="text-2xl font-mono font-bold text-emerald-400 mt-1">
-            {successfulTests}
-          </div>
-        </div>
 
-        <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60">
-          <div className="text-xs text-slate-400 uppercase tracking-wider">
-            8. Failed / Error Tests
+          <div className="p-3.5">
+            <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              8. Failed / Error Tests
+            </div>
+            <div className="font-mono text-xl font-semibold text-red-700 dark:text-red-400 mt-1 flex items-baseline gap-1.5">
+              <span>{failedTests}</span>
+              <span className="text-[11px] font-normal text-muted-foreground">
+                (incl. negative 4xx)
+              </span>
+            </div>
           </div>
-          <div className="text-2xl font-mono font-bold text-rose-400 mt-1">
-            {failedTests}
-            <span className="text-xs font-normal text-slate-400 ml-2">
-              (includes negative 4xx tests)
-            </span>
-          </div>
-        </div>
 
-        <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60">
-          <div className="text-xs text-slate-400 uppercase tracking-wider">
-            9. Latest HTTP Status
+          <div className="p-3.5">
+            <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              9. Latest HTTP Status
+            </div>
+            <div className="mt-1.5">
+              {latestResult ? (
+                <HttpStatusBadge
+                  status={latestResult.httpStatus}
+                  statusText={latestResult.statusText}
+                />
+              ) : (
+                <span className="font-mono text-xs text-muted-foreground">
+                  N/A
+                </span>
+              )}
+            </div>
           </div>
-          <div className="text-lg font-mono font-bold text-sky-400 mt-1">
-            {latestResult
-              ? `HTTP ${latestResult.httpStatus} (${latestResult.statusText})`
-              : 'N/A'}
-          </div>
-        </div>
 
-        <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60">
-          <div className="text-xs text-slate-400 uppercase tracking-wider">
-            10. Latest Usage Cost
-          </div>
-          <div className="text-sm font-mono font-bold text-emerald-400 mt-1.5">
-            {latestWithCost
-              ? `$${latestWithCost.usageAndCost.costValue} (${latestWithCost.usageAndCost.costPath})`
-              : 'Not returned in executed tests'}
+          <div className="p-3.5">
+            <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              10. Latest Usage Cost
+            </div>
+            <div className="font-mono text-xs font-semibold text-emerald-700 dark:text-emerald-400 mt-1.5">
+              {latestWithCost
+                ? `$${latestWithCost.usageAndCost.costValue} (${latestWithCost.usageAndCost.costPath})`
+                : 'Not returned in executed tests'}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Discovered Live Model Catalog Summary */}
       {catalogAnalysis && (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="rounded-md border border-border bg-card overflow-hidden">
+          <div className="px-4 py-3 border-b border-border bg-muted/20 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h3 className="text-sm font-bold text-slate-100">
-                Live Model Catalog Snapshot Summary (
-                <code className="text-sky-400">GET /v1/models</code>)
-              </h3>
-              <p className="text-xs text-slate-400">
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs font-semibold text-foreground">
+                  Live Model Catalog Snapshot Summary
+                </h3>
+                <HttpMethodBadge method="GET" />
+                <code className="font-mono text-xs text-foreground">
+                  /v1/models
+                </code>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
                 Discovered {catalogAnalysis.totalModels} models across{' '}
                 {catalogAnalysis.modesFound.length} modes and{' '}
                 {catalogAnalysis.providersFound.length} provider groups.
               </p>
             </div>
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => onNavigateSection('model-catalog')}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600/20 text-indigo-300 border border-indigo-700/60 hover:bg-indigo-600/30"
             >
-              Open Full Model Catalog Inspector →
-            </button>
+              <span>Open Full Model Catalog Inspector</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
-            <div className="p-3 rounded-lg bg-slate-950 border border-slate-800">
-              <div className="text-slate-400">Chat Models</div>
-              <div className="text-lg font-bold text-slate-100 mt-0.5">
+          <div className="grid grid-cols-2 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-border font-mono text-xs">
+            <div className="p-3.5">
+              <div className="text-[11px] text-muted-foreground">
+                Chat Models
+              </div>
+              <div className="text-lg font-semibold text-foreground mt-0.5">
                 {catalogAnalysis.chatModels.length}
               </div>
-              <div className="text-[11px] text-slate-500">
+              <div className="text-[11px] text-muted-foreground">
                 mode = &quot;chat&quot;
               </div>
             </div>
-            <div className="p-3 rounded-lg bg-slate-950 border border-slate-800">
-              <div className="text-slate-400">Embedding Models</div>
-              <div className="text-lg font-bold text-indigo-400 mt-0.5">
+            <div className="p-3.5">
+              <div className="text-[11px] text-muted-foreground">
+                Embedding Models
+              </div>
+              <div className="text-lg font-semibold text-foreground mt-0.5">
                 {catalogAnalysis.embeddingModels.length}
               </div>
-              <div className="text-[11px] text-amber-400">
+              <div className="text-[11px] text-amber-700 dark:text-amber-400">
                 Catalog dimensions: NOT PROVIDED
               </div>
             </div>
-            <div className="p-3 rounded-lg bg-slate-950 border border-slate-800">
-              <div className="text-slate-400">Decision Models</div>
-              <div className="text-lg font-bold text-emerald-400 mt-0.5">
+            <div className="p-3.5">
+              <div className="text-[11px] text-muted-foreground">
+                Decision Models
+              </div>
+              <div className="text-lg font-semibold text-emerald-700 dark:text-emerald-400 mt-0.5">
                 {catalogAnalysis.decisionModels.length}
               </div>
-              <div className="text-[11px] text-slate-500">
+              <div className="text-[11px] text-muted-foreground truncate">
                 {catalogAnalysis.decisionModels.map((m) => m.modelId).join(', ')}
               </div>
             </div>
-            <div className="p-3 rounded-lg bg-slate-950 border border-slate-800">
-              <div className="text-slate-400">Discovered Capability Keys</div>
-              <div className="text-xs font-bold text-sky-400 mt-1">
+            <div className="p-3.5">
+              <div className="text-[11px] text-muted-foreground">
+                Discovered Capability Keys
+              </div>
+              <div className="text-xs font-semibold text-sky-700 dark:text-sky-400 mt-1">
                 supports_vision, supports_reasoning
               </div>
-              <div className="text-[11px] text-slate-500 mt-0.5">
+              <div className="text-[11px] text-muted-foreground mt-0.5">
                 Pricing: pricing.prompt / completion
               </div>
             </div>
@@ -427,27 +502,30 @@ export function OverviewPanel({
       )}
 
       {/* Session Execution Log Table */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
-        <div className="px-4 py-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
-          <h3 className="text-sm font-bold text-slate-200">
+      <div className="rounded-md border border-border bg-card overflow-hidden">
+        <div className="px-4 py-3 bg-muted/20 border-b border-border flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-xs font-semibold text-foreground">
             Executed API Requests in Current In-Memory Session (
             {testResults.length})
           </h3>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => onNavigateSection('test-reports')}
-            className="text-xs font-medium text-indigo-400 hover:text-indigo-300"
+            className="h-7 px-2 text-xs"
           >
-            View & Download Session Test Report →
-          </button>
+            <span>View & Download Session Test Report</span>
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Button>
         </div>
 
         {testResults.length === 0 ? (
-          <div className="p-8 text-center text-xs text-slate-400 space-y-2">
+          <div className="p-8 text-center text-xs text-muted-foreground space-y-2">
             <div>
-              No API tests executed yet in this session. Click &quot;Run All
-              Category A Safe Tests&quot; above or select an endpoint from the
-              sidebar.
+              No API tests executed yet in this session. Click{' '}
+              <strong>Run All Category A Safe Tests</strong> above or select an
+              endpoint from the sidebar.
             </div>
             <div>
               Need reference examples? Visit{' '}
@@ -455,83 +533,62 @@ export function OverviewPanel({
                 href={OFFICIAL_DOCS_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sky-400 underline hover:text-sky-300"
+                className="text-foreground underline hover:opacity-80"
               >
-                ReRouter Official Documentation ↗
+                ReRouter Official Documentation
               </a>
             </div>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs font-mono">
-              <thead className="bg-slate-950 text-slate-400">
-                <tr>
-                  <th className="py-2.5 px-3 border-b border-slate-800">Time</th>
-                  <th className="py-2.5 px-3 border-b border-slate-800">Cat</th>
-                  <th className="py-2.5 px-3 border-b border-slate-800">
-                    Test Label
-                  </th>
-                  <th className="py-2.5 px-3 border-b border-slate-800">
-                    Method & URL
-                  </th>
-                  <th className="py-2.5 px-3 border-b border-slate-800">
-                    HTTP Status
-                  </th>
-                  <th className="py-2.5 px-3 border-b border-slate-800">
-                    Duration
-                  </th>
-                  <th className="py-2.5 px-3 border-b border-slate-800">
-                    Summary / Error Classification
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/70">
-                {testResults.map((r) => (
-                  <tr key={r.id} className="hover:bg-slate-950/60">
-                    <td className="py-2 px-3 text-slate-400">
-                      {new Date(r.timestamp).toLocaleTimeString()}
-                    </td>
-                    <td className="py-2 px-3">
-                      <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
-                        {r.category}
-                      </span>
-                    </td>
-                    <td className="py-2 px-3 text-slate-200 font-sans font-medium">
-                      {r.label}
-                    </td>
-                    <td className="py-2 px-3 text-sky-400">
-                      {r.method} {r.exactUrl}
-                    </td>
-                    <td className="py-2 px-3">
-                      <span
-                        className={`px-2 py-0.5 rounded font-bold ${
-                          r.httpStatus >= 200 && r.httpStatus < 300
-                            ? 'bg-emerald-950 text-emerald-300'
-                            : r.httpStatus === 401
-                              ? 'bg-amber-950 text-amber-300'
-                              : 'bg-rose-950 text-rose-300'
-                        }`}
-                      >
-                        {r.httpStatus}
-                      </span>
-                    </td>
-                    <td className="py-2 px-3 text-slate-300">
-                      {r.durationMs} ms
-                    </td>
-                    <td className="py-2 px-3 text-slate-300 max-w-xs truncate">
-                      {r.errorAnalysis
-                        ? `${r.errorAnalysis.errorCategoryLabel}: ${r.errorAnalysis.readableMessage}`
-                        : r.endpointId === 'models'
-                          ? 'Model catalog fetched'
-                          : r.finishReason
-                            ? `finish_reason: ${r.finishReason}`
-                            : 'Completed'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table className="font-mono">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Time</TableHead>
+                <TableHead>Cat</TableHead>
+                <TableHead>Test Label</TableHead>
+                <TableHead>Method & URL</TableHead>
+                <TableHead>HTTP Status</TableHead>
+                <TableHead>Duration</TableHead>
+                <TableHead>Summary / Error Classification</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {testResults.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell className="text-muted-foreground whitespace-nowrap">
+                    {new Date(r.timestamp).toLocaleTimeString()}
+                  </TableCell>
+                  <TableCell>
+                    <CategoryBadge category={r.category} label={r.category} />
+                  </TableCell>
+                  <TableCell className="font-sans font-medium text-foreground">
+                    {r.label}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1.5">
+                      <HttpMethodBadge method={r.method} />
+                      <span className="text-foreground">{r.exactUrl}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <HttpStatusBadge status={r.httpStatus} showPrefix={false} />
+                  </TableCell>
+                  <TableCell className="text-muted-foreground whitespace-nowrap">
+                    {r.durationMs} ms
+                  </TableCell>
+                  <TableCell className="text-muted-foreground max-w-xs truncate">
+                    {r.errorAnalysis
+                      ? `${r.errorAnalysis.errorCategoryLabel}: ${r.errorAnalysis.readableMessage}`
+                      : r.endpointId === 'models'
+                        ? 'Model catalog fetched'
+                        : r.finishReason
+                          ? `finish_reason: ${r.finishReason}`
+                          : 'Completed'}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
       </div>
     </div>

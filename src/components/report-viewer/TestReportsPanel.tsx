@@ -2,6 +2,16 @@
 
 import React, { useMemo, useState } from 'react';
 import {
+  Check,
+  Copy,
+  Download,
+  FileJson,
+  FileText,
+  ShieldCheck,
+} from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
   OFFICIAL_BILLING_URL,
   OFFICIAL_DOCS_URL,
   useRerouterSession,
@@ -136,79 +146,102 @@ export function TestReportsPanel({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header & Download Actions */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="text-base font-bold text-slate-100">
-            In-Memory Session Test Reports & Evidence Exporter
-          </h2>
-          <p className="text-xs text-slate-400">
-            Generate and download reports directly to your device from your
-            current in-memory session. All API keys and Authorization headers
-            are automatically redacted.
-          </p>
+      <div className="rounded-md border border-border bg-card p-4 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold text-foreground">
+                In-Memory Session Test Reports & Evidence Exporter
+              </h2>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Generate and download reports directly to your device from your
+              current in-memory session. All API keys and Authorization headers
+              are automatically redacted.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleCopyReport}
+            >
+              {copiedReport ? (
+                <>
+                  <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>Copied Report</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3.5 w-3.5" />
+                  <span>Copy Report Markdown</span>
+                </>
+              )}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleDownloadMarkdownReport}
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span>Download Session Report (.md)</span>
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={handleDownloadJsonResults}
+            >
+              <FileJson className="h-3.5 w-3.5" />
+              <span>Download Session JSON (.json)</span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleDownloadPrivacyQuestions}
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span>Download Privacy Questionnaire (.md)</span>
+            </Button>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={handleCopyReport}
-            className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
-          >
-            {copiedReport ? '✓ Copied Report' : 'Copy Report Markdown'}
-          </button>
-          <button
-            type="button"
-            onClick={handleDownloadMarkdownReport}
-            className="px-4 py-2 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
-          >
-            ⬇ Download Session Report (.md)
-          </button>
-          <button
-            type="button"
-            onClick={handleDownloadJsonResults}
-            className="px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
-          >
-            ⬇ Download Session JSON (.json)
-          </button>
-          <button
-            type="button"
-            onClick={handleDownloadPrivacyQuestions}
-            className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
-          >
-            ⬇ Download Privacy Questionnaire (.md)
-          </button>
-        </div>
-      </div>
-
-      {/* Session Isolation & Redaction Notice */}
-      <div className="rounded-xl border border-indigo-800/70 bg-indigo-950/25 p-3.5 text-xs text-slate-300 space-y-1">
-        <div className="font-semibold text-indigo-300">
-          Session Isolation & Historical Documentation Distinction:
-        </div>
-        <p className="leading-relaxed">
+        {/* Session Isolation & Redaction Notice */}
+        <div className="rounded-md border border-border bg-muted/20 p-3 text-xs text-muted-foreground leading-relaxed">
+          <strong className="text-foreground">
+            Session Isolation & Historical Documentation Distinction:
+          </strong>{' '}
           The report previewed below is dynamically compiled from the{' '}
-          <strong>{testResults.length} request(s)</strong> executed in your
-          current in-memory browser session using your own API key. It is never
-          written to server disk, database, or persistent browser storage, and
-          is cleared when you click <strong>Disconnect</strong> or refresh the
+          <strong className="text-foreground">
+            {testResults.length} request(s)
+          </strong>{' '}
+          executed in your current in-memory browser session using your own API
+          key. It is never written to server disk, database, or persistent
+          browser storage, and is cleared when you click{' '}
+          <strong className="text-foreground">Disconnect</strong> or refresh the
           tab.
-        </p>
+        </div>
       </div>
 
       {/* Live Markdown Report Viewer */}
-      <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+      <div className="rounded-md border border-border bg-card overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 border-b border-border bg-muted/30">
+          <span className="font-mono text-xs text-foreground font-medium">
             Live Session Report Preview: REROUTER_SESSION_TEST_REPORT.md (
             {testResults.length} Executed Tests Included)
           </span>
-          <span className="text-xs font-mono text-emerald-400">
-            Credentials Redacted: Verified
-          </span>
+          <Badge variant="success">
+            <ShieldCheck className="h-3 w-3" />
+            <span>Credentials Redacted: Verified</span>
+          </Badge>
         </div>
-        <pre className="p-4 rounded-lg bg-slate-900/90 text-xs font-mono text-slate-200 overflow-auto max-h-[700px] whitespace-pre-wrap leading-relaxed">
+        <pre className="p-4 bg-background/60 text-xs font-mono text-foreground overflow-auto max-h-[700px] whitespace-pre-wrap leading-relaxed">
           {reportMarkdown}
         </pre>
       </div>

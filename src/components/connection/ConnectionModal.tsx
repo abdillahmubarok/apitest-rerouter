@@ -2,6 +2,40 @@
 
 import React, { useState } from 'react';
 import {
+  AlertCircle,
+  AlertTriangle,
+  BookOpen,
+  CreditCard,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  Info,
+  KeyRound,
+  Loader2,
+  ShieldCheck,
+} from 'lucide-react';
+import { RerouterLogo } from '@/components/brand/RerouterLogo';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
+import {
   OFFICIAL_BILLING_URL,
   OFFICIAL_DOCS_URL,
   useRerouterSession,
@@ -35,105 +69,84 @@ export function ConnectionModal() {
     setAuthFormat(selectedFormat);
     const result = await testAndConnect(keyInput, selectedFormat);
     if (result.ok) {
-      // Clear local modal input buffer once key is transferred into session state
       setKeyInput('');
       setShowKey(false);
     }
   };
 
-  const stateBadge = () => {
+  const renderStateBadge = () => {
     switch (connectionState) {
       case 'CONNECTING':
         return (
-          <span className="px-2.5 py-1 rounded-full text-[11px] font-mono bg-indigo-950 text-indigo-300 border border-indigo-700 flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-indigo-400 animate-ping" />
+          <Badge variant="info" className="gap-1.5">
+            <Loader2 className="h-3 w-3 animate-spin" />
             CONNECTING
-          </span>
+          </Badge>
         );
       case 'INVALID_API_KEY':
-        return (
-          <span className="px-2.5 py-1 rounded-full text-[11px] font-mono bg-rose-950 text-rose-300 border border-rose-700">
-            INVALID_API_KEY
-          </span>
-        );
+        return <Badge variant="destructive">INVALID_API_KEY</Badge>;
       case 'BALANCE_EMPTY':
-        return (
-          <span className="px-2.5 py-1 rounded-full text-[11px] font-mono bg-amber-950 text-amber-300 border border-amber-700">
-            BALANCE_EMPTY (HTTP 402)
-          </span>
-        );
+        return <Badge variant="warning">BALANCE_EMPTY (402)</Badge>;
       case 'RE_ROUTER_UNAVAILABLE':
-        return (
-          <span className="px-2.5 py-1 rounded-full text-[11px] font-mono bg-amber-950 text-amber-300 border border-amber-700">
-            RE_ROUTER_UNAVAILABLE
-          </span>
-        );
+        return <Badge variant="warning">RE_ROUTER_UNAVAILABLE</Badge>;
       case 'CONNECTION_ERROR':
-        return (
-          <span className="px-2.5 py-1 rounded-full text-[11px] font-mono bg-rose-950 text-rose-300 border border-rose-700">
-            CONNECTION_ERROR
-          </span>
-        );
+        return <Badge variant="destructive">CONNECTION_ERROR</Badge>;
       default:
-        return (
-          <span className="px-2.5 py-1 rounded-full text-[11px] font-mono bg-slate-900 text-slate-400 border border-slate-800">
-            NOT_CONNECTED
-          </span>
-        );
+        return <Badge variant="secondary">NOT_CONNECTED</Badge>;
     }
   };
 
+  const feedbackVariant =
+    connectionState === 'INVALID_API_KEY' ||
+    connectionState === 'CONNECTION_ERROR'
+      ? 'destructive'
+      : connectionState === 'BALANCE_EMPTY' ||
+          connectionState === 'RE_ROUTER_UNAVAILABLE'
+        ? 'warning'
+        : 'default';
+
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-4 overflow-y-auto"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="rerouter-connection-modal-title"
-    >
-      <div className="w-full max-w-xl rounded-2xl border border-slate-800 bg-slate-900/95 shadow-2xl shadow-indigo-950/40 overflow-hidden my-auto">
-        {/* Top Accent Banner */}
-        <div className="h-1.5 w-full bg-gradient-to-r from-indigo-500 via-sky-500 to-emerald-500" />
-
-        <div className="p-6 sm:p-7 space-y-6">
-          {/* Header */}
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3.5">
-              <div className="h-11 w-11 rounded-xl bg-indigo-600 flex items-center justify-center font-mono font-bold text-base text-white shadow-lg shadow-indigo-600/30 shrink-0">
-                RR
-              </div>
-              <div>
-                <h2
-                  id="rerouter-connection-modal-title"
-                  className="text-lg sm:text-xl font-bold tracking-tight text-white"
-                >
-                  ReRouter API Playground
-                </h2>
-                <p className="text-xs sm:text-sm text-slate-300 mt-0.5">
-                  Connect your ReRouter account to start testing APIs.
-                </p>
-              </div>
+    <Dialog open={!isConnected}>
+      <DialogContent
+        onEscapeKeyDown={(e) => e.preventDefault()}
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+        className="max-w-lg p-0 overflow-hidden"
+      >
+        <div className="p-5 space-y-4">
+          <DialogHeader className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <RerouterLogo size="lg" subtitle="Public BYOK API Playground" />
+              {renderStateBadge()}
             </div>
-            {stateBadge()}
-          </div>
+            <DialogTitle className="text-sm font-semibold pt-1">
+              Connect Your ReRouter API Key
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Authenticate against{' '}
+              <code className="font-mono text-foreground">
+                https://rerouter.mubarokah.com/v1
+              </code>{' '}
+              to inspect live endpoints, model schemas, and SSE streams.
+            </DialogDescription>
+          </DialogHeader>
 
-          {/* Connection Form */}
-          <form onSubmit={handleSubmit} className="space-y-5" autoComplete="off">
-            {/* API Key Password Input */}
-            <div className="space-y-2">
+          <Separator />
+
+          <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
+            {/* API Key Input */}
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label
-                  htmlFor="rerouter-byok-key-input"
-                  className="text-xs font-semibold uppercase tracking-wider text-slate-300"
-                >
-                  Your ReRouter API Key (BYOK)
-                </label>
-                <span className="text-[11px] font-mono text-slate-400">
-                  Target: https://rerouter.mubarokah.com/v1
+                <Label htmlFor="rerouter-byok-key-input">
+                  ReRouter API Key
+                </Label>
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  In-Memory Session Only
                 </span>
               </div>
-
               <div className="relative flex items-center">
-                <input
+                <KeyRound className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
                   id="rerouter-byok-key-input"
                   name="rerouter-byok-session-key"
                   type={showKey ? 'text' : 'password'}
@@ -146,208 +159,220 @@ export function ConnectionModal() {
                   spellCheck={false}
                   data-lpignore="true"
                   data-1p-ignore="true"
-                  placeholder="Enter your ReRouter API key (e.g. sk-...)..."
-                  className="w-full pr-20 pl-3.5 py-2.5 text-xs sm:text-sm font-mono rounded-xl bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
+                  placeholder="sk-..."
+                  className="h-9 pl-8 pr-16 font-mono text-xs"
                 />
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setShowKey((prev) => !prev)}
                   disabled={isConnecting}
                   aria-label={showKey ? 'Hide API key' : 'Show API key'}
-                  className="absolute right-2 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
+                  className="absolute right-1 h-7 px-2 text-[11px] font-mono text-muted-foreground hover:text-foreground"
                 >
-                  {showKey ? 'Hide' : 'Show'}
-                </button>
+                  {showKey ? (
+                    <>
+                      <EyeOff className="h-3.5 w-3.5" />
+                      <span>Hide</span>
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="h-3.5 w-3.5" />
+                      <span>Show</span>
+                    </>
+                  )}
+                </Button>
               </div>
             </div>
 
-            {/* Authentication Format Selector */}
-            <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase tracking-wider text-slate-300 block">
-                Authentication Header Format
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {/* Authentication Header Format */}
+            <div className="space-y-1.5">
+              <Label htmlFor="rerouter-auth-format-select">
+                Default Authentication Header Format
+              </Label>
+              <Select
+                disabled={isConnecting}
+                value={selectedFormat}
+                onValueChange={(val) => setSelectedFormat(val as UserAuthFormat)}
+              >
+                <SelectTrigger
+                  id="rerouter-auth-format-select"
+                  className="h-9 font-mono text-xs"
+                >
+                  <SelectValue placeholder="Select authentication header format" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bearer" className="font-mono text-xs">
+                    Authorization: Bearer YOUR_API_KEY (Default / OpenAI)
+                  </SelectItem>
+                  <SelectItem value="x-api-key" className="font-mono text-xs">
+                    x-api-key: YOUR_API_KEY (Anthropic-Compatible)
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="grid grid-cols-2 gap-2 pt-1">
                 <button
                   type="button"
                   disabled={isConnecting}
                   onClick={() => setSelectedFormat('bearer')}
-                  className={`p-3 rounded-xl border text-left transition-all ${
+                  className={`rounded-md border px-2.5 py-2 text-left transition-colors cursor-pointer ${
                     selectedFormat === 'bearer'
-                      ? 'bg-indigo-950/70 border-indigo-500 text-white shadow-sm'
-                      : 'bg-slate-950/80 border-slate-800 text-slate-300 hover:border-slate-700'
+                      ? 'border-primary bg-accent text-accent-foreground'
+                      : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold">
-                      1. Bearer Authentication
-                    </span>
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-900/60 text-indigo-200">
+                  <div className="flex items-center justify-between text-[11px] font-medium text-foreground">
+                    <span>Bearer Header</span>
+                    <Badge variant="outline" className="text-[10px] px-1 py-0">
                       Default
-                    </span>
+                    </Badge>
                   </div>
-                  <code className="block text-[11px] font-mono text-sky-400 mt-1.5 truncate">
-                    Authorization: Bearer YOUR_API_KEY
+                  <code className="mt-1 block truncate font-mono text-[10px] text-muted-foreground">
+                    Authorization: Bearer ...
                   </code>
                 </button>
-
                 <button
                   type="button"
                   disabled={isConnecting}
                   onClick={() => setSelectedFormat('x-api-key')}
-                  className={`p-3 rounded-xl border text-left transition-all ${
+                  className={`rounded-md border px-2.5 py-2 text-left transition-colors cursor-pointer ${
                     selectedFormat === 'x-api-key'
-                      ? 'bg-indigo-950/70 border-indigo-500 text-white shadow-sm'
-                      : 'bg-slate-950/80 border-slate-800 text-slate-300 hover:border-slate-700'
+                      ? 'border-primary bg-accent text-accent-foreground'
+                      : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold">
-                      2. Anthropic-Compatible
-                    </span>
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
-                      Header
-                    </span>
+                  <div className="flex items-center justify-between text-[11px] font-medium text-foreground">
+                    <span>Anthropic Header</span>
+                    <Badge variant="outline" className="text-[10px] px-1 py-0">
+                      x-api-key
+                    </Badge>
                   </div>
-                  <code className="block text-[11px] font-mono text-purple-300 mt-1.5 truncate">
-                    x-api-key: YOUR_API_KEY
+                  <code className="mt-1 block truncate font-mono text-[10px] text-muted-foreground">
+                    x-api-key: ...
                   </code>
                 </button>
               </div>
-              <p className="text-[11px] text-slate-400">
-                Both formats are supported by ReRouter. Endpoint-specific
-                authentication headers can also be toggled inside individual
-                testing panels.
-              </p>
             </div>
 
-            {/* Validation Feedback Box */}
+            {/* Validation Feedback Alert */}
             {connectionMessage && (
-              <div
-                className={`rounded-xl p-3.5 text-xs font-mono border space-y-2 ${
-                  connectionState === 'INVALID_API_KEY' ||
-                  connectionState === 'CONNECTION_ERROR'
-                    ? 'bg-rose-950/60 border-rose-800 text-rose-200'
-                    : connectionState === 'BALANCE_EMPTY' ||
-                        connectionState === 'RE_ROUTER_UNAVAILABLE'
-                      ? 'bg-amber-950/60 border-amber-700 text-amber-200'
-                      : 'bg-slate-950/90 border-slate-800 text-slate-300'
-                }`}
-              >
-                <div className="flex items-start gap-2">
-                  <span className="font-bold shrink-0">
-                    {connectionState === 'INVALID_API_KEY' ||
-                    connectionState === 'CONNECTION_ERROR'
-                      ? '✕'
-                      : connectionState === 'BALANCE_EMPTY'
-                        ? '⚠'
-                        : 'ℹ'}
-                  </span>
-                  <span className="leading-relaxed break-words">
-                    {connectionMessage}
-                  </span>
-                </div>
-                {connectionState === 'BALANCE_EMPTY' && (
-                  <div className="pt-1">
-                    <a
-                      href={OFFICIAL_BILLING_URL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-sans font-semibold text-xs transition-colors"
-                    >
-                      Open ReRouter Billing Page →
-                    </a>
-                  </div>
+              <Alert variant={feedbackVariant}>
+                {feedbackVariant === 'destructive' ? (
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                ) : feedbackVariant === 'warning' ? (
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                ) : (
+                  <Info className="h-4 w-4 shrink-0 mt-0.5" />
                 )}
-              </div>
+                <div className="space-y-2 flex-1 min-w-0">
+                  <AlertTitle className="font-mono text-xs">
+                    {connectionState}
+                  </AlertTitle>
+                  <AlertDescription className="font-mono text-[11px] break-words">
+                    {connectionMessage}
+                  </AlertDescription>
+                  {connectionState === 'BALANCE_EMPTY' && (
+                    <div className="pt-1">
+                      <Button asChild size="sm" variant="outline">
+                        <a
+                          href={OFFICIAL_BILLING_URL}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <CreditCard className="h-3.5 w-3.5" />
+                          <span>Open ReRouter Billing</span>
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </Alert>
             )}
 
-            {/* Primary Button & Secondary Links */}
-            <div className="space-y-3 pt-1">
-              <button
+            {/* Primary Action & External Links */}
+            <div className="space-y-2.5 pt-1">
+              <Button
                 type="submit"
+                size="lg"
                 disabled={isConnecting || !keyInput.trim()}
-                className="w-full py-3 px-4 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full font-medium"
               >
                 {isConnecting ? (
                   <>
-                    <span className="h-2.5 w-2.5 rounded-full bg-white animate-ping" />
+                    <Loader2 className="h-4 w-4 animate-spin" />
                     <span>
-                      Testing Connection (Non-Billable Token Count Check)...
+                      Verifying Key (Non-Billable Token Count Check)...
                     </span>
                   </>
                 ) : (
-                  <span>Test Connection</span>
+                  <span>Test Connection & Enter Playground</span>
                 )}
-              </button>
+              </Button>
 
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
-                <a
-                  href={OFFICIAL_DOCS_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-sky-400 border border-slate-800 transition-colors font-medium"
-                >
-                  <span>📖 Documentation</span>
-                  <span className="text-[10px] font-mono text-slate-400">
-                    rerouter.mubarokah.com/docs ↗
-                  </span>
-                </a>
-
-                <a
-                  href={OFFICIAL_BILLING_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-emerald-400 border border-slate-800 transition-colors font-medium"
-                >
-                  <span>💳 Get API Key / Billing</span>
-                  <span className="text-[10px] font-mono text-slate-400">
-                    rerouter.mubarokah.com/billing ↗
-                  </span>
-                </a>
+              <div className="grid grid-cols-2 gap-2">
+                <Button asChild variant="outline" size="sm" className="w-full">
+                  <a
+                    href={OFFICIAL_DOCS_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span>Documentation</span>
+                    <ExternalLink className="h-3 w-3 text-muted-foreground ml-auto" />
+                  </a>
+                </Button>
+                <Button asChild variant="outline" size="sm" className="w-full">
+                  <a
+                    href={OFFICIAL_BILLING_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span>Get Key / Billing</span>
+                    <ExternalLink className="h-3 w-3 text-muted-foreground ml-auto" />
+                  </a>
+                </Button>
               </div>
             </div>
           </form>
 
-          {/* Privacy & Session Architecture Notice */}
-          <div className="rounded-xl bg-slate-950/90 border border-slate-800/90 p-3.5 space-y-2 text-[11px] text-slate-300 leading-relaxed">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-slate-200 uppercase tracking-wider text-[10px] font-mono">
-                🔒 BYOK Privacy & Session Architecture Notice
+          <Separator />
+
+          {/* BYOK Privacy & Session Architecture Notice */}
+          <div className="rounded-md border border-border bg-muted/30 p-3 space-y-2 text-[11px] text-muted-foreground">
+            <div className="flex items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-foreground">
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                BYOK Privacy & Session Architecture
               </span>
-              <span className="text-[10px] font-mono text-teal-400">
-                No Database · In-Memory Only
-              </span>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                No DB · In-Memory
+              </Badge>
             </div>
-            <ul className="space-y-1 text-slate-400 list-disc list-inside">
+            <ul className="space-y-1 list-disc list-inside leading-relaxed">
               <li>
-                You supply your own ReRouter API key. This platform does{' '}
-                <strong className="text-slate-200">not</strong> use a database or
-                user account system.
+                Your API key is held exclusively in React browser memory during
+                your active tab session—never stored in databases, cookies, or
+                web storage.
               </li>
               <li>
-                Your API key remains strictly in React browser application
-                memory during your active page session and is{' '}
-                <strong className="text-slate-200">never</strong> intentionally
-                written to persistent browser web storage, IndexedDB, or
-                cookies.
-              </li>
-              <li>
-                For each test you trigger, your key is sent in request headers
-                to this platform&apos;s server-side proxy solely to forward the
-                request to{' '}
-                <code className="font-mono text-sky-400">
-                  https://rerouter.mubarokah.com/v1
+                Each test forwards your key over same-origin request headers to
+                the Next.js proxy solely to authenticate against{' '}
+                <code className="font-mono text-foreground">
+                  rerouter.mubarokah.com/v1
                 </code>{' '}
-                without server logging or persistence.
+                without server logging.
               </li>
               <li>
-                Refreshing or closing this browser tab clears your in-memory
-                session and requires connecting again.
+                Disconnecting or refreshing this tab immediately purges your key
+                and session history from memory.
               </li>
             </ul>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

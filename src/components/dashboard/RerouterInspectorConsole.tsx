@@ -1,8 +1,38 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Activity,
+  AlertTriangle,
+  Binary,
+  BookOpen,
+  Clock,
+  Cpu,
+  CreditCard,
+  Database,
+  Download,
+  ExternalLink,
+  FileText,
+  GitBranch,
+  GitCompare,
+  Hash,
+  Layers,
+  LayoutDashboard,
+  Loader2,
+  LogOut,
+  Menu,
+  MessageSquare,
+  Moon,
+  RotateCcw,
+  Scissors,
+  ShieldCheck,
+  Sun,
+  Terminal,
+  X,
+} from 'lucide-react';
 import { CreditTruncationPanel } from './CreditTruncationPanel';
 import { OverviewPanel } from './OverviewPanel';
+import { RerouterLogo } from '@/components/brand/RerouterLogo';
 import { BillingRedirectModal } from '@/components/connection/BillingRedirectModal';
 import { ConnectionModal } from '@/components/connection/ConnectionModal';
 import { EndpointTestPanel } from '@/components/endpoint-tester/EndpointTestPanel';
@@ -12,6 +42,25 @@ import { ModelChangesPanel } from '@/components/model-catalog/ModelChangesPanel'
 import { RateLimitPanel } from '@/components/rate-limit-inspector/RateLimitPanel';
 import { PrivacyPanel } from '@/components/report-viewer/PrivacyPanel';
 import { TestReportsPanel } from '@/components/report-viewer/TestReportsPanel';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { HttpMethodBadge } from '@/components/ui/http-badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import {
   OFFICIAL_BILLING_URL,
   OFFICIAL_DOCS_URL,
@@ -35,117 +84,147 @@ interface SidebarNavItem {
   id: SidebarSectionId;
   number: number;
   label: string;
-  badge?: string;
-  category?: 'A' | 'B' | 'C' | 'Info';
+  group: 'Workspace' | 'Core Endpoints' | 'Diagnostics & Governance';
+  icon: React.ComponentType<{ className?: string }>;
+  methodBadge?: 'GET' | 'POST';
+  tagBadge?: string;
 }
 
 const SIDEBAR_ITEMS: SidebarNavItem[] = [
-  { id: 'overview', number: 1, label: 'Overview', category: 'Info' },
+  {
+    id: 'overview',
+    number: 1,
+    label: 'Overview',
+    group: 'Workspace',
+    icon: LayoutDashboard,
+  },
   {
     id: 'model-catalog',
     number: 2,
     label: 'Model Catalog',
-    badge: 'GET /v1/models',
-    category: 'A',
+    group: 'Workspace',
+    icon: Database,
+    methodBadge: 'GET',
   },
   {
     id: 'chat-completions',
     number: 3,
     label: 'Chat Completions',
-    badge: 'POST',
-    category: 'B',
+    group: 'Core Endpoints',
+    icon: MessageSquare,
+    methodBadge: 'POST',
   },
   {
     id: 'streaming',
     number: 4,
     label: 'Streaming',
-    badge: 'SSE',
-    category: 'B',
+    group: 'Core Endpoints',
+    icon: Activity,
+    methodBadge: 'POST',
+    tagBadge: 'SSE',
   },
   {
     id: 'responses',
     number: 5,
     label: 'Responses API',
-    badge: '/v1/responses',
-    category: 'B',
+    group: 'Core Endpoints',
+    icon: Layers,
+    methodBadge: 'POST',
   },
   {
     id: 'anthropic-messages',
     number: 6,
     label: 'Anthropic Messages',
-    badge: '/v1/messages',
-    category: 'B',
+    group: 'Core Endpoints',
+    icon: Terminal,
+    methodBadge: 'POST',
   },
   {
     id: 'count-tokens',
     number: 7,
     label: 'Count Tokens',
-    badge: '2 Paths',
-    category: 'A',
+    group: 'Core Endpoints',
+    icon: Hash,
+    methodBadge: 'POST',
   },
   {
     id: 'embeddings',
     number: 8,
     label: 'Embeddings',
-    badge: 'Vectors',
-    category: 'B',
+    group: 'Core Endpoints',
+    icon: Binary,
+    methodBadge: 'POST',
   },
   {
     id: 'decisions',
     number: 9,
     label: 'Decisions',
-    badge: '/v1/decisions',
-    category: 'B',
+    group: 'Core Endpoints',
+    icon: GitBranch,
+    methodBadge: 'POST',
   },
   {
     id: 'systemone',
     number: 10,
     label: 'System One',
-    badge: '/v1/systemone',
-    category: 'B',
+    group: 'Core Endpoints',
+    icon: Cpu,
+    methodBadge: 'POST',
   },
   {
     id: 'error-inspector',
     number: 11,
     label: 'Error Inspector',
-    badge: '400-404',
-    category: 'A',
+    group: 'Diagnostics & Governance',
+    icon: AlertTriangle,
+    tagBadge: '400-404',
   },
   {
     id: 'rate-limits',
     number: 12,
     label: 'Rate Limits',
-    badge: 'Headers',
-    category: 'A',
+    group: 'Diagnostics & Governance',
+    icon: Clock,
+    tagBadge: 'Headers',
   },
   {
     id: 'credit-truncation',
     number: 13,
     label: 'Credit & Truncation',
-    badge: 'Restricted',
-    category: 'C',
+    group: 'Diagnostics & Governance',
+    icon: Scissors,
+    tagBadge: 'Cat C',
   },
   {
     id: 'model-changes',
     number: 14,
     label: 'Model Changes',
-    badge: 'Diffs',
-    category: 'Info',
+    group: 'Diagnostics & Governance',
+    icon: GitCompare,
+    tagBadge: 'Diffs',
   },
   {
     id: 'privacy',
     number: 15,
     label: 'Privacy',
-    badge: 'BYOK & 15 Qs',
-    category: 'Info',
+    group: 'Diagnostics & Governance',
+    icon: ShieldCheck,
+    tagBadge: '15 Qs',
   },
   {
     id: 'test-reports',
     number: 16,
     label: 'Test Reports',
-    badge: 'Export',
-    category: 'Info',
+    group: 'Diagnostics & Governance',
+    icon: FileText,
+    tagBadge: 'Export',
   },
+];
+
+const NAV_GROUPS: Array<SidebarNavItem['group']> = [
+  'Workspace',
+  'Core Endpoints',
+  'Diagnostics & Governance',
 ];
 
 interface ExecuteTestParams {
@@ -159,7 +238,6 @@ interface ExecuteTestParams {
 
 export function RerouterInspectorConsole() {
   const { sessionEpoch } = useRerouterSession();
-  // Keying by sessionEpoch automatically clears all in-memory test state on Disconnect
   return <RerouterInspectorWorkspace key={sessionEpoch} />;
 }
 
@@ -180,6 +258,7 @@ function RerouterInspectorWorkspace() {
   const [activeSection, setActiveSection] =
     useState<SidebarSectionId>('overview');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isDarkTheme, setIsDarkTheme] = useState(true);
 
   const [configStatus, setConfigStatus] = useState<ServerConfigStatus | null>(
     null
@@ -206,6 +285,16 @@ function RerouterInspectorWorkspace() {
 
   const initializedRef = useRef<boolean>(false);
 
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.toggle('dark', isDarkTheme);
+    }
+  }, [isDarkTheme]);
+
+  const toggleTheme = useCallback(() => {
+    setIsDarkTheme((prev) => !prev);
+  }, []);
+
   const handleAuthFormatChange = useCallback(
     (fmt: AuthFormat) => {
       if (fmt === 'bearer' || fmt === 'x-api-key') {
@@ -229,7 +318,6 @@ function RerouterInspectorWorkspace() {
       result: TestExecutionResult,
       retryParams?: ExecuteTestParams
     ): boolean => {
-      // 1. Authoritative insufficient credit balance check (HTTP 402)
       if (
         result.httpStatus === 402 ||
         result.errorAnalysis?.isAuthoritativeInsufficientBalance
@@ -238,12 +326,11 @@ function RerouterInspectorWorkspace() {
           result.httpStatus || 402,
           result.exactUrl,
           result.errorAnalysis?.readableMessage ||
-            'Account has no available credit balance or key credit limit reached.'
+          'Account has no available credit balance or key credit limit reached.'
         );
         return true;
       }
 
-      // 2. Authentication failure (HTTP 401) on a request that used the visitor's active key
       const usedUserKey =
         result.authFormatUsed === 'bearer' ||
         result.authFormatUsed === 'x-api-key';
@@ -255,12 +342,11 @@ function RerouterInspectorWorkspace() {
         handleUnauthorized401(
           result.label,
           result.errorAnalysis?.readableMessage ||
-            'Invalid, expired, or revoked API key.'
+          'Invalid, expired, or revoked API key.'
         );
         return true;
       }
 
-      // 3. Rate Limit (HTTP 429) — respect Retry-After and do not auto-retry
       if (result.httpStatus === 429) {
         const retryHint = result.rateLimitInspection.retryAfterExists
           ? ` Retry-After: ${result.rateLimitInspection.retryAfterValue} (${result.rateLimitInspection.retryAfterFormat}).`
@@ -272,7 +358,6 @@ function RerouterInspectorWorkspace() {
         return true;
       }
 
-      // 4. Temporary service/provider unavailability (502, 503, 504) — offer manual retry
       if (
         result.httpStatus === 502 ||
         result.httpStatus === 503 ||
@@ -284,13 +369,11 @@ function RerouterInspectorWorkspace() {
         setNotification({
           type: 'warning',
           allowManualRetry: Boolean(retryParams),
-          message: `${
-            result.errorAnalysis?.errorCategoryLabel ||
+          message: `${result.errorAnalysis?.errorCategoryLabel ||
             `Service temporarily unavailable (HTTP ${result.httpStatus})`
-          }: ${
-            result.errorAnalysis?.readableMessage ||
+            }: ${result.errorAnalysis?.readableMessage ||
             'Upstream provider or gateway is temporarily unavailable.'
-          }`,
+            }`,
         });
         return true;
       }
@@ -346,9 +429,8 @@ function RerouterInspectorWorkspace() {
         }
         setNotification({
           type: data.testResult?.ok ? 'success' : 'info',
-          message: `GET /v1/models completed with HTTP ${
-            data.testResult?.httpStatus ?? res.status
-          } (${data.catalogAnalysis?.totalModels ?? 0} models discovered).`,
+          message: `GET /v1/models completed with HTTP ${data.testResult?.httpStatus ?? res.status
+            } (${data.catalogAnalysis?.totalModels ?? 0} models discovered).`,
         });
       } catch (err) {
         setNotification({
@@ -365,7 +447,6 @@ function RerouterInspectorWorkspace() {
     [activeAuthFormat, appendResult, buildProxyAuthHeaders]
   );
 
-  // Upon successful connection, load GET /v1/models and include verification telemetry
   useEffect(() => {
     if (isConnected && !initializedRef.current) {
       initializedRef.current = true;
@@ -550,572 +631,672 @@ function RerouterInspectorWorkspace() {
   };
 
   const endpointPanelKeyPrefix = `${catalogAnalysis?.fetchedAt ?? 'init'}-${activeAuthFormat}`;
+  const currentNavItem =
+    SIDEBAR_ITEMS.find((item) => item.id === activeSection) ?? SIDEBAR_ITEMS[0];
 
-  return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      {/* BYOK Connection Modal (Shown immediately when not connected) */}
-      <ConnectionModal key={`modal-${sessionEpoch}`} />
-
-      {/* Authoritative HTTP 402 Insufficient Credit Redirect Modal */}
-      <BillingRedirectModal />
-
-      {/* Top Application Header */}
-      <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/95 backdrop-blur px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="lg:hidden px-2.5 py-1.5 rounded bg-slate-900 border border-slate-800 text-slate-200 text-xs font-mono"
-          >
-            {mobileMenuOpen ? '✕ Close Menu' : '☰ Sections'}
-          </button>
-          <div className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-lg bg-indigo-600 flex items-center justify-center font-mono font-bold text-sm text-white shadow">
-              RR
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-sm md:text-base font-bold tracking-tight text-white">
-                  ReRouter API Playground
-                </h1>
-                <span className="hidden sm:inline-block px-2 py-0.5 text-[10px] font-mono rounded bg-slate-900 text-sky-400 border border-slate-800">
-                  BYOK · Next.js 16.4.6
-                </span>
-              </div>
-              <p className="text-[11px] font-mono text-slate-400">
-                Upstream:{' '}
-                <span className="text-slate-300">
-                  {configStatus?.baseUrl ??
-                    'https://rerouter.mubarokah.com/v1'}
-                </span>
-              </p>
-            </div>
-          </div>
+  const renderSidebarNavigationContent = (onItemSelect?: () => void) => (
+    <div className="flex h-full flex-col justify-between">
+      {/* Top Sidebar Branding */}
+      <div>
+        <div className="flex items-center justify-between px-3.5 py-3 border-b border-sidebar-border">
+          <RerouterLogo size="md" subtitle="API Playground" />
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+            BYOK
+          </Badge>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Persistent Connection Status Indicator */}
-          <div
-            className={`px-2.5 py-1 rounded-full text-xs font-mono border flex items-center gap-1.5 ${
-              isConnected
-                ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700'
-                : 'bg-amber-950/80 text-amber-300 border-amber-700'
-            }`}
-          >
-            <span
-              className={`h-2 w-2 rounded-full ${
-                isConnected ? 'bg-emerald-400' : 'bg-amber-400'
-              }`}
-            />
-            <span>{isConnected ? 'Connected' : 'Not Connected'}</span>
-          </div>
+        {/* Grouped Navigation Items */}
+        <div className="p-2 space-y-3">
+          {NAV_GROUPS.map((groupName) => {
+            const items = SIDEBAR_ITEMS.filter((i) => i.group === groupName);
+            return (
+              <div key={groupName} className="space-y-0.5">
+                <div className="px-2.5 py-1 font-mono text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                  {groupName}
+                </div>
+                {items.map((item) => {
+                  const isActive = activeSection === item.id;
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveSection(item.id);
+                        onItemSelect?.();
+                      }}
+                      className={`w-full flex items-center justify-between gap-1.5 rounded-md px-2.5 py-1.5 text-xs transition-colors text-left cursor-pointer ${isActive
+                        ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+                        : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground'
+                        }`}
+                    >
+                      <span className="flex items-center gap-2 min-w-0">
+                        <Icon className="h-3.5 w-3.5 shrink-0" />
+                        <span className="font-mono text-[10px] opacity-60 shrink-0">
+                          {String(item.number).padStart(2, '0')}
+                        </span>
+                        <span className="truncate">{item.label}</span>
+                      </span>
 
-          {/* Active Authentication Format Indicator */}
-          {isConnected && (
-            <div className="px-2.5 py-1 rounded-full text-xs font-mono bg-slate-900 text-indigo-300 border border-slate-800">
-              Auth:{' '}
-              <strong>
-                {activeAuthFormat === 'x-api-key' ? 'x-api-key' : 'Bearer'}
-              </strong>
-            </div>
-          )}
+                      <span className="flex items-center gap-1 shrink-0">
+                        {item.methodBadge && (
+                          <HttpMethodBadge
+                            method={item.methodBadge}
+                            className="text-[9px] px-1 py-0"
+                          />
+                        )}
+                        {item.tagBadge && (
+                          <span className="rounded border border-border bg-muted px-1 py-0 font-mono text-[9px] text-muted-foreground">
+                            {item.tagBadge}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
-          {/* Balance Verification Status Indicator */}
-          <div
-            title="ReRouter does not expose a balance inquiry endpoint; balance is monitored passively for authoritative HTTP 402 responses."
-            className={`hidden md:flex px-2.5 py-1 rounded-full text-xs font-mono border items-center gap-1.5 ${
-              balanceState === 'BALANCE_EMPTY'
-                ? 'bg-rose-950/80 text-rose-300 border-rose-700'
-                : 'bg-slate-900 text-slate-300 border border-slate-800'
-            }`}
-          >
-            <span>
-              Balance:{' '}
-              <strong>
-                {balanceState === 'BALANCE_EMPTY'
-                  ? 'Empty (HTTP 402)'
-                  : 'Unknown'}
-              </strong>
-            </span>
-          </div>
-
-          <div className="px-2.5 py-1 rounded-full text-xs font-mono bg-slate-900 text-slate-300 border border-slate-800">
-            Session Requests: <strong>{testResults.length}</strong>
-          </div>
-
-          {/* Official Documentation Link */}
+      {/* Bottom External Links & Connection Footer */}
+      <div className="border-t border-sidebar-border p-2.5 space-y-2 bg-muted/20">
+        <div className="space-y-0.5">
           <a
             href={OFFICIAL_DOCS_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-900 hover:bg-slate-800 text-sky-400 border border-slate-800 transition-colors"
+            className="flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
           >
-            Docs ↗
+            <span className="flex items-center gap-2">
+              <BookOpen className="h-3.5 w-3.5" />
+              <span>Documentation</span>
+            </span>
+            <ExternalLink className="h-3 w-3 opacity-60" />
           </a>
-
-          {/* Official Billing Link */}
           <a
             href={OFFICIAL_BILLING_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-slate-800 transition-colors"
+            className="flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
           >
-            Billing ↗
+            <span className="flex items-center gap-2">
+              <CreditCard className="h-3.5 w-3.5" />
+              <span>Billing & Credits</span>
+            </span>
+            <ExternalLink className="h-3 w-3 opacity-60" />
           </a>
+        </div>
 
-          <button
-            type="button"
-            onClick={handleQuickDownloadReport}
-            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
-          >
-            ⬇ Session Report
-          </button>
+        <Separator />
 
-          {/* Disconnect Action */}
+        <div className="flex items-center justify-between gap-2 px-1">
+          <div className="flex items-center gap-1.5 text-xs font-mono">
+            <span
+              className={`h-2 w-2 rounded-full ${isConnected
+                ? 'bg-emerald-500'
+                : 'bg-amber-500'
+                }`}
+            />
+            <span className="text-[11px] text-foreground font-medium">
+              {isConnected ? 'Connected' : 'Disconnected'}
+            </span>
+          </div>
           {isConnected && (
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => disconnect()}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-950/90 hover:bg-rose-900 text-rose-200 border border-rose-800 transition-colors"
+              className="h-7 px-2 text-[11px]"
             >
-              Disconnect
-            </button>
+              <LogOut className="h-3 w-3" />
+              <span>Disconnect</span>
+            </Button>
           )}
         </div>
-      </header>
+      </div>
+    </div>
+  );
 
-      {/* Main Content Layout with Sidebar */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar Navigation */}
-        <aside
-          className={`${
-            mobileMenuOpen ? 'block' : 'hidden'
-          } lg:block w-64 shrink-0 border-r border-slate-800 bg-slate-950/90 overflow-y-auto p-3 flex flex-col justify-between gap-4`}
-        >
-          <div className="space-y-1">
-            <div className="px-2.5 py-1.5 text-[10px] font-mono uppercase tracking-wider text-slate-500">
-              Playground Sections (16)
-            </div>
-            {SIDEBAR_ITEMS.map((item) => {
-              const isActive = activeSection === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => {
-                    setActiveSection(item.id);
-                    setMobileMenuOpen(false);
-                  }}
-                  className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${
-                    isActive
-                      ? 'bg-indigo-600 text-white shadow-sm'
-                      : 'text-slate-300 hover:bg-slate-900 hover:text-white'
-                  }`}
-                >
-                  <span className="flex items-center gap-2 truncate">
-                    <span
-                      className={`font-mono text-[11px] ${
-                        isActive ? 'text-indigo-200' : 'text-slate-500'
-                      }`}
+  return (
+    <TooltipProvider delayDuration={200}>
+      <div className="min-h-screen bg-background text-foreground flex flex-col">
+        {/* BYOK Connection Modal */}
+        <ConnectionModal key={`modal-${sessionEpoch}`} />
+
+        {/* Authoritative HTTP 402 Insufficient Credit Redirect Modal */}
+        <BillingRedirectModal />
+
+        <div className="flex-1 flex min-h-screen">
+          {/* Desktop Sidebar */}
+          <aside className="hidden lg:flex w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground sticky top-0 h-screen">
+            <ScrollArea className="h-full">
+              {renderSidebarNavigationContent()}
+            </ScrollArea>
+          </aside>
+
+          {/* Main Column: Top Header + Workspace Viewport */}
+          <div className="flex-1 flex flex-col min-w-0">
+            {/* Compact Developer Workstation Header */}
+            <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur-xs px-4 py-2 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                {/* Mobile Navigation Sheet */}
+                <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+                  <SheetTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      aria-label="Open navigation menu"
+                      className="lg:hidden h-8 w-8 shrink-0"
                     >
-                      {String(item.number).padStart(2, '0')}.
-                    </span>
-                    <span className="truncate">{item.label}</span>
+                      <Menu className="h-4 w-4" />
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="left" className="p-0 w-64">
+                    <SheetHeader className="sr-only">
+                      <SheetTitle>ReRouter Navigation</SheetTitle>
+                    </SheetHeader>
+                    <ScrollArea className="h-full">
+                      {renderSidebarNavigationContent(() =>
+                        setMobileMenuOpen(false)
+                      )}
+                    </ScrollArea>
+                  </SheetContent>
+                </Sheet>
+
+                <div className="lg:hidden">
+                  <RerouterLogo size="sm" showWordmark={false} />
+                </div>
+
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {String(currentNavItem.number).padStart(2, '0')} /
                   </span>
-                  {item.badge && (
-                    <span
-                      className={`px-1.5 py-0.5 text-[10px] font-mono rounded shrink-0 ${
-                        isActive
-                          ? 'bg-indigo-700 text-indigo-100'
-                          : item.category === 'A'
-                            ? 'bg-teal-950 text-teal-300 border border-teal-800/60'
-                            : item.category === 'B'
-                              ? 'bg-amber-950 text-amber-300 border border-amber-800/60'
-                              : item.category === 'C'
-                                ? 'bg-purple-950 text-purple-300 border border-purple-800/60'
-                                : 'bg-slate-900 text-slate-400 border border-slate-800'
-                      }`}
-                    >
-                      {item.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Official ReRouter External Resources & Session Box */}
-          <div className="pt-3 border-t border-slate-800/80 space-y-1.5">
-            <div className="px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider text-slate-500">
-              Official ReRouter Links
-            </div>
-            <a
-              href={OFFICIAL_DOCS_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-sky-400 hover:bg-slate-900 transition-colors"
-            >
-              <span>📖 Documentation</span>
-              <span className="font-mono text-[10px] text-slate-500">
-                /docs ↗
-              </span>
-            </a>
-            <a
-              href={OFFICIAL_BILLING_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-emerald-400 hover:bg-slate-900 transition-colors"
-            >
-              <span>💳 Billing & Credits</span>
-              <span className="font-mono text-[10px] text-slate-500">
-                /billing ↗
-              </span>
-            </a>
-            {isConnected && (
-              <button
-                type="button"
-                onClick={() => disconnect()}
-                className="w-full mt-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-rose-950/60 hover:bg-rose-900/80 text-rose-200 border border-rose-800/70 transition-colors"
-              >
-                <span>⏻ Disconnect API Key</span>
-              </button>
-            )}
-          </div>
-        </aside>
-
-        {/* Main Viewport */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
-          {/* Status / Error Notification Toast */}
-          {notification && (
-            <div
-              className={`rounded-lg px-4 py-2.5 text-xs font-mono flex flex-wrap items-center justify-between gap-3 border ${
-                notification.type === 'error'
-                  ? 'bg-rose-950/70 text-rose-200 border-rose-800'
-                  : notification.type === 'warning'
-                    ? 'bg-amber-950/70 text-amber-200 border-amber-700'
-                    : notification.type === 'success'
-                      ? 'bg-emerald-950/60 text-emerald-200 border-emerald-800'
-                      : 'bg-slate-900 text-slate-200 border-slate-800'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                {isLoading && (
-                  <span className="inline-block h-2 w-2 rounded-full bg-indigo-400 animate-ping" />
-                )}
-                <span>{notification.message}</span>
+                  <h1 className="text-sm font-semibold tracking-tight text-foreground truncate">
+                    {currentNavItem.label}
+                  </h1>
+                  <Separator
+                    orientation="vertical"
+                    className="hidden md:block h-4 mx-1"
+                  />
+                  <span className="hidden md:inline-block font-mono text-[11px] text-muted-foreground truncate">
+                    {configStatus?.baseUrl ??
+                      'https://rerouter.mubarokah.com/v1'}
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                {notification.allowManualRetry && lastRetryParams && (
-                  <button
-                    type="button"
-                    disabled={isLoading}
-                    onClick={() => void executeEndpointTest(lastRetryParams)}
-                    className="px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-500 text-slate-950 font-sans font-semibold text-xs"
-                  >
-                    ↻ Retry Request
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setNotification(null)}
-                  className="text-slate-400 hover:text-white"
+
+              {/* Session Telemetry & Header Actions */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Badge
+                  variant={isConnected ? 'success' : 'warning'}
+                  className="gap-1.5"
                 >
-                  ✕
-                </button>
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-amber-500'
+                      }`}
+                  />
+                  <span>{isConnected ? 'Connected' : 'Not Connected'}</span>
+                </Badge>
+
+                {isConnected && (
+                  <Badge variant="secondary">
+                    Auth:{' '}
+                    {activeAuthFormat === 'x-api-key' ? 'x-api-key' : 'Bearer'}
+                  </Badge>
+                )}
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge
+                      variant={
+                        balanceState === 'BALANCE_EMPTY'
+                          ? 'destructive'
+                          : 'outline'
+                      }
+                      className="hidden sm:inline-flex cursor-help"
+                    >
+                      Balance:{' '}
+                      {balanceState === 'BALANCE_EMPTY'
+                        ? 'Empty (402)'
+                        : 'Unknown'}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    ReRouter does not expose a balance inquiry endpoint; balance
+                    is monitored passively via authoritative HTTP 402 responses.
+                  </TooltipContent>
+                </Tooltip>
+
+                <Badge variant="outline">
+                  Requests: {testResults.length}
+                </Badge>
+
+                <Separator
+                  orientation="vertical"
+                  className="hidden sm:block h-4 mx-0.5"
+                />
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleTheme}
+                  aria-label={
+                    isDarkTheme ? 'Switch to light theme' : 'Switch to dark theme'
+                  }
+                  className="h-7 w-7"
+                >
+                  {isDarkTheme ? (
+                    <Sun className="h-3.5 w-3.5" />
+                  ) : (
+                    <Moon className="h-3.5 w-3.5" />
+                  )}
+                </Button>
+
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="sm"
+                  className="hidden sm:inline-flex h-7 px-2 text-xs"
+                >
+                  <a
+                    href={OFFICIAL_DOCS_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <BookOpen className="h-3.5 w-3.5" />
+                    <span>Docs</span>
+                  </a>
+                </Button>
+
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="sm"
+                  className="hidden sm:inline-flex h-7 px-2 text-xs"
+                >
+                  <a
+                    href={OFFICIAL_BILLING_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <CreditCard className="h-3.5 w-3.5" />
+                    <span>Billing</span>
+                  </a>
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleQuickDownloadReport}
+                  className="h-7 px-2.5 text-xs"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span className="hidden md:inline">Session Report</span>
+                </Button>
+
+                {isConnected && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => disconnect()}
+                    className="h-7 px-2.5 text-xs hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                    <span>Disconnect</span>
+                  </Button>
+                )}
               </div>
-            </div>
-          )}
+            </header>
 
-          {/* Section 1: Overview */}
-          {activeSection === 'overview' && (
-            <OverviewPanel
-              configStatus={configStatus}
-              catalogAnalysis={catalogAnalysis}
-              testResults={testResults}
-              activeAuthFormat={activeAuthFormat}
-              onChangeAuthFormat={handleAuthFormatChange}
-              onRunSafeSuite={handleRunSafeSuite}
-              onRefreshModels={() => fetchModelsCatalog(activeAuthFormat)}
-              onNavigateSection={setActiveSection}
-              isLoading={isLoading}
-            />
-          )}
-
-          {/* Section 2: Model Catalog */}
-          {activeSection === 'model-catalog' && (
-            <ModelCatalogPanel
-              catalogAnalysis={catalogAnalysis}
-              modelsTestResult={modelsTestResult}
-              embeddingTestResults={testResults.filter(
-                (r) => r.endpointId === 'embeddings'
+            {/* Main Viewport */}
+            <main className="flex-1 overflow-y-auto p-4 md:p-5 space-y-4">
+              {/* Status / Error Notification Banner */}
+              {notification && (
+                <Alert
+                  variant={
+                    notification.type === 'error'
+                      ? 'destructive'
+                      : notification.type === 'warning'
+                        ? 'warning'
+                        : notification.type === 'success'
+                          ? 'success'
+                          : 'default'
+                  }
+                  className="py-2 flex items-center justify-between gap-3"
+                >
+                  <AlertDescription className="flex items-center gap-2 font-mono text-xs">
+                    {isLoading && (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                    )}
+                    <span>{notification.message}</span>
+                  </AlertDescription>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {notification.allowManualRetry && lastRetryParams && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={isLoading}
+                        onClick={() => void executeEndpointTest(lastRetryParams)}
+                        className="h-6 px-2 text-xs"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        <span>Retry Request</span>
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Dismiss notification"
+                      onClick={() => setNotification(null)}
+                      className="h-6 w-6"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </Alert>
               )}
-              onRefreshModels={() => fetchModelsCatalog(activeAuthFormat)}
-              onExecuteEmbeddingDimensionTest={async (modelId) => {
-                await executeEndpointTest({
-                  endpointId: 'embeddings',
-                  selectedModelId: modelId,
-                  customBodyRaw: JSON.stringify(
-                    {
-                      model: modelId,
-                      input: ['ReRouter embedding dimension verification'],
-                    },
-                    null,
-                    2
-                  ),
-                });
-              }}
-              isLoading={isLoading}
-            />
-          )}
 
-          {/* Section 3: Chat Completions (TEST 2) */}
-          {activeSection === 'chat-completions' && (
-            <EndpointTestPanel
-              key={`chat-completions-${endpointPanelKeyPrefix}`}
-              primaryEndpointId="chat-completions"
-              catalogAnalysis={catalogAnalysis}
-              testResults={testResults}
-              defaultAuthFormat={activeAuthFormat}
-              onExecuteTest={async (p) => {
-                await executeEndpointTest(p);
-              }}
-              isLoading={isLoading}
-            />
-          )}
+              {/* Section 1: Overview */}
+              {activeSection === 'overview' && (
+                <OverviewPanel
+                  configStatus={configStatus}
+                  catalogAnalysis={catalogAnalysis}
+                  testResults={testResults}
+                  activeAuthFormat={activeAuthFormat}
+                  onChangeAuthFormat={handleAuthFormatChange}
+                  onRunSafeSuite={handleRunSafeSuite}
+                  onRefreshModels={() => fetchModelsCatalog(activeAuthFormat)}
+                  onNavigateSection={setActiveSection}
+                  isLoading={isLoading}
+                />
+              )}
 
-          {/* Section 4: Streaming Chat Completions (TEST 3) */}
-          {activeSection === 'streaming' && (
-            <EndpointTestPanel
-              key={`chat-completions-stream-${endpointPanelKeyPrefix}`}
-              primaryEndpointId="chat-completions-stream"
-              catalogAnalysis={catalogAnalysis}
-              testResults={testResults}
-              defaultAuthFormat={activeAuthFormat}
-              onExecuteTest={async (p) => {
-                await executeEndpointTest(p);
-              }}
-              isLoading={isLoading}
-            />
-          )}
+              {/* Section 2: Model Catalog */}
+              {activeSection === 'model-catalog' && (
+                <ModelCatalogPanel
+                  catalogAnalysis={catalogAnalysis}
+                  modelsTestResult={modelsTestResult}
+                  embeddingTestResults={testResults.filter(
+                    (r) => r.endpointId === 'embeddings'
+                  )}
+                  onRefreshModels={() => fetchModelsCatalog(activeAuthFormat)}
+                  onExecuteEmbeddingDimensionTest={async (modelId) => {
+                    await executeEndpointTest({
+                      endpointId: 'embeddings',
+                      selectedModelId: modelId,
+                      customBodyRaw: JSON.stringify(
+                        {
+                          model: modelId,
+                          input: ['ReRouter embedding dimension verification'],
+                        },
+                        null,
+                        2
+                      ),
+                    });
+                  }}
+                  isLoading={isLoading}
+                />
+              )}
 
-          {/* Section 5: Responses API (TEST 4: Non-Streaming + Streaming) */}
-          {activeSection === 'responses' && (
-            <EndpointTestPanel
-              key={`responses-${endpointPanelKeyPrefix}`}
-              primaryEndpointId="responses"
-              secondaryEndpointId="responses-stream"
-              catalogAnalysis={catalogAnalysis}
-              testResults={testResults}
-              defaultAuthFormat={activeAuthFormat}
-              onExecuteTest={async (p) => {
-                await executeEndpointTest(p);
-              }}
-              isLoading={isLoading}
-            />
-          )}
+              {/* Section 3: Chat Completions (TEST 2) */}
+              {activeSection === 'chat-completions' && (
+                <EndpointTestPanel
+                  key={`chat-completions-${endpointPanelKeyPrefix}`}
+                  primaryEndpointId="chat-completions"
+                  catalogAnalysis={catalogAnalysis}
+                  testResults={testResults}
+                  defaultAuthFormat={activeAuthFormat}
+                  onExecuteTest={async (p) => {
+                    await executeEndpointTest(p);
+                  }}
+                  isLoading={isLoading}
+                />
+              )}
 
-          {/* Section 6: Anthropic Messages (TEST 5) */}
-          {activeSection === 'anthropic-messages' && (
-            <EndpointTestPanel
-              key={`anthropic-messages-${endpointPanelKeyPrefix}`}
-              primaryEndpointId="anthropic-messages"
-              catalogAnalysis={catalogAnalysis}
-              testResults={testResults}
-              defaultAuthFormat="x-api-key"
-              onExecuteTest={async (p) => {
-                await executeEndpointTest(p);
-              }}
-              isLoading={isLoading}
-            />
-          )}
+              {/* Section 4: Streaming Chat Completions (TEST 3) */}
+              {activeSection === 'streaming' && (
+                <EndpointTestPanel
+                  key={`chat-completions-stream-${endpointPanelKeyPrefix}`}
+                  primaryEndpointId="chat-completions-stream"
+                  catalogAnalysis={catalogAnalysis}
+                  testResults={testResults}
+                  defaultAuthFormat={activeAuthFormat}
+                  onExecuteTest={async (p) => {
+                    await executeEndpointTest(p);
+                  }}
+                  isLoading={isLoading}
+                />
+              )}
 
-          {/* Section 7: Anthropic Count Tokens (TEST 6: Both Candidates) */}
-          {activeSection === 'count-tokens' && (
-            <EndpointTestPanel
-              key={`count-tokens-${endpointPanelKeyPrefix}`}
-              primaryEndpointId="count-tokens-v1"
-              secondaryEndpointId="count-tokens-root"
-              catalogAnalysis={catalogAnalysis}
-              testResults={testResults}
-              defaultAuthFormat="x-api-key"
-              onExecuteTest={async (p) => {
-                await executeEndpointTest(p);
-              }}
-              isLoading={isLoading}
-            />
-          )}
+              {/* Section 5: Responses API (TEST 4: Non-Streaming + Streaming) */}
+              {activeSection === 'responses' && (
+                <EndpointTestPanel
+                  key={`responses-${endpointPanelKeyPrefix}`}
+                  primaryEndpointId="responses"
+                  secondaryEndpointId="responses-stream"
+                  catalogAnalysis={catalogAnalysis}
+                  testResults={testResults}
+                  defaultAuthFormat={activeAuthFormat}
+                  onExecuteTest={async (p) => {
+                    await executeEndpointTest(p);
+                  }}
+                  isLoading={isLoading}
+                />
+              )}
 
-          {/* Section 8: Embeddings (TEST 7) */}
-          {activeSection === 'embeddings' && (
-            <EndpointTestPanel
-              key={`embeddings-${endpointPanelKeyPrefix}`}
-              primaryEndpointId="embeddings"
-              catalogAnalysis={catalogAnalysis}
-              testResults={testResults}
-              defaultAuthFormat={activeAuthFormat}
-              onExecuteTest={async (p) => {
-                await executeEndpointTest(p);
-              }}
-              isLoading={isLoading}
-            />
-          )}
+              {/* Section 6: Anthropic Messages (TEST 5) */}
+              {activeSection === 'anthropic-messages' && (
+                <EndpointTestPanel
+                  key={`anthropic-messages-${endpointPanelKeyPrefix}`}
+                  primaryEndpointId="anthropic-messages"
+                  catalogAnalysis={catalogAnalysis}
+                  testResults={testResults}
+                  defaultAuthFormat="x-api-key"
+                  onExecuteTest={async (p) => {
+                    await executeEndpointTest(p);
+                  }}
+                  isLoading={isLoading}
+                />
+              )}
 
-          {/* Section 9: Decisions API (TEST 8) */}
-          {activeSection === 'decisions' && (
-            <EndpointTestPanel
-              key={`decisions-${endpointPanelKeyPrefix}`}
-              primaryEndpointId="decisions"
-              catalogAnalysis={catalogAnalysis}
-              testResults={testResults}
-              defaultAuthFormat={activeAuthFormat}
-              onExecuteTest={async (p) => {
-                await executeEndpointTest(p);
-              }}
-              isLoading={isLoading}
-            />
-          )}
+              {/* Section 7: Anthropic Count Tokens (TEST 6: Both Candidates) */}
+              {activeSection === 'count-tokens' && (
+                <EndpointTestPanel
+                  key={`count-tokens-${endpointPanelKeyPrefix}`}
+                  primaryEndpointId="count-tokens-v1"
+                  secondaryEndpointId="count-tokens-root"
+                  catalogAnalysis={catalogAnalysis}
+                  testResults={testResults}
+                  defaultAuthFormat="x-api-key"
+                  onExecuteTest={async (p) => {
+                    await executeEndpointTest(p);
+                  }}
+                  isLoading={isLoading}
+                />
+              )}
 
-          {/* Section 10: System One API (TEST 9) */}
-          {activeSection === 'systemone' && (
-            <EndpointTestPanel
-              key={`systemone-${endpointPanelKeyPrefix}`}
-              primaryEndpointId="systemone"
-              catalogAnalysis={catalogAnalysis}
-              testResults={testResults}
-              defaultAuthFormat={activeAuthFormat}
-              onExecuteTest={async (p) => {
-                await executeEndpointTest(p);
-              }}
-              isLoading={isLoading}
-            />
-          )}
+              {/* Section 8: Embeddings (TEST 7) */}
+              {activeSection === 'embeddings' && (
+                <EndpointTestPanel
+                  key={`embeddings-${endpointPanelKeyPrefix}`}
+                  primaryEndpointId="embeddings"
+                  catalogAnalysis={catalogAnalysis}
+                  testResults={testResults}
+                  defaultAuthFormat={activeAuthFormat}
+                  onExecuteTest={async (p) => {
+                    await executeEndpointTest(p);
+                  }}
+                  isLoading={isLoading}
+                />
+              )}
 
-          {/* Section 11: Error Inspector */}
-          {activeSection === 'error-inspector' && (
-            <ErrorInspectorPanel
-              testResults={testResults}
-              onExecuteErrorTest={async (endpointId) => {
-                await executeEndpointTest({ endpointId });
-              }}
-              onRunAllSafeErrorTests={handleRunAllSafeErrorTests}
-              isLoading={isLoading}
-            />
-          )}
+              {/* Section 9: Decisions API (TEST 8) */}
+              {activeSection === 'decisions' && (
+                <EndpointTestPanel
+                  key={`decisions-${endpointPanelKeyPrefix}`}
+                  primaryEndpointId="decisions"
+                  catalogAnalysis={catalogAnalysis}
+                  testResults={testResults}
+                  defaultAuthFormat={activeAuthFormat}
+                  onExecuteTest={async (p) => {
+                    await executeEndpointTest(p);
+                  }}
+                  isLoading={isLoading}
+                />
+              )}
 
-          {/* Section 12: Rate Limits */}
-          {activeSection === 'rate-limits' && (
-            <RateLimitPanel testResults={testResults} />
-          )}
+              {/* Section 10: System One API (TEST 9) */}
+              {activeSection === 'systemone' && (
+                <EndpointTestPanel
+                  key={`systemone-${endpointPanelKeyPrefix}`}
+                  primaryEndpointId="systemone"
+                  catalogAnalysis={catalogAnalysis}
+                  testResults={testResults}
+                  defaultAuthFormat={activeAuthFormat}
+                  onExecuteTest={async (p) => {
+                    await executeEndpointTest(p);
+                  }}
+                  isLoading={isLoading}
+                />
+              )}
 
-          {/* Section 13: Credit & Truncation */}
-          {activeSection === 'credit-truncation' && (
-            <CreditTruncationPanel
-              catalogAnalysis={catalogAnalysis}
-              testResults={testResults}
-              onExecuteTokenLimitTest={async (modelId) => {
-                await executeEndpointTest({
-                  endpointId: 'token-limit-test',
-                  selectedModelId: modelId,
-                });
-              }}
-              onExecuteCreditLimitTest={async (p) => {
-                const payload = {
-                  model: p.modelId,
-                  messages: [
-                    {
-                      role: 'user',
-                      content:
-                        'Write a detailed explanation of distributed consensus algorithms.',
-                    },
-                  ],
-                  max_tokens: p.maxTokens,
-                  stream: p.stream,
-                };
-                await executeEndpointTest({
-                  endpointId: 'credit-limit-test',
-                  selectedModelId: p.modelId,
-                  customBodyRaw: JSON.stringify(payload, null, 2),
-                  dedicatedLowCreditKey: p.dedicatedLowCreditKey,
-                  confirmLowCreditTest: true,
-                });
-              }}
-              isLoading={isLoading}
-            />
-          )}
+              {/* Section 11: Error Inspector */}
+              {activeSection === 'error-inspector' && (
+                <ErrorInspectorPanel
+                  testResults={testResults}
+                  onExecuteErrorTest={async (endpointId) => {
+                    await executeEndpointTest({ endpointId });
+                  }}
+                  onRunAllSafeErrorTests={handleRunAllSafeErrorTests}
+                  isLoading={isLoading}
+                />
+              )}
 
-          {/* Section 14: Model Changes */}
-          {activeSection === 'model-changes' && (
-            <ModelChangesPanel
-              catalogAnalysis={catalogAnalysis}
-              rawCatalogObject={rawCatalogObject}
-              snapshots={snapshots}
-              testResults={testResults}
-              onCaptureSnapshot={(customLabel) => {
-                if (!rawCatalogObject || !catalogAnalysis) return;
-                const now = new Date().toISOString();
-                const newSnap: CatalogSnapshot = {
-                  id: `snap-${now}-${snapshots.length + 1}`,
-                  label:
-                    customLabel ||
-                    `Snapshot #${snapshots.length + 1} (${new Date(
-                      now
-                    ).toLocaleTimeString()})`,
-                  timestamp: now,
-                  totalModels: catalogAnalysis.totalModels,
-                  rawCatalog: rawCatalogObject,
-                };
-                setSnapshots((prev) => [...prev, newSnap]);
-                setNotification({
-                  type: 'success',
-                  message: `Captured catalog snapshot: ${newSnap.label}`,
-                });
-              }}
-              onImportSnapshot={(snap) => {
-                setSnapshots((prev) => [...prev, snap]);
-                setNotification({
-                  type: 'success',
-                  message: `Imported snapshot: ${snap.label}`,
-                });
-              }}
-              onExecuteClaudeAliasTest={async (aliasModelId) => {
-                await executeEndpointTest({
-                  endpointId: 'claude-alias-test',
-                  authFormat: 'x-api-key',
-                  selectedModelId: aliasModelId,
-                  customBodyRaw: JSON.stringify(
-                    {
-                      model: aliasModelId,
-                      max_tokens: 16,
+              {/* Section 12: Rate Limits */}
+              {activeSection === 'rate-limits' && (
+                <RateLimitPanel testResults={testResults} />
+              )}
+
+              {/* Section 13: Credit & Truncation */}
+              {activeSection === 'credit-truncation' && (
+                <CreditTruncationPanel
+                  catalogAnalysis={catalogAnalysis}
+                  testResults={testResults}
+                  onExecuteTokenLimitTest={async (modelId) => {
+                    await executeEndpointTest({
+                      endpointId: 'token-limit-test',
+                      selectedModelId: modelId,
+                    });
+                  }}
+                  onExecuteCreditLimitTest={async (p) => {
+                    const payload = {
+                      model: p.modelId,
                       messages: [
                         {
                           role: 'user',
-                          content: 'Reply with: Alias test.',
+                          content:
+                            'Write a detailed explanation of distributed consensus algorithms.',
                         },
                       ],
-                    },
-                    null,
-                    2
-                  ),
-                });
-              }}
-              isLoading={isLoading}
-            />
-          )}
+                      max_tokens: p.maxTokens,
+                      stream: p.stream,
+                    };
+                    await executeEndpointTest({
+                      endpointId: 'credit-limit-test',
+                      selectedModelId: p.modelId,
+                      customBodyRaw: JSON.stringify(payload, null, 2),
+                      dedicatedLowCreditKey: p.dedicatedLowCreditKey,
+                      confirmLowCreditTest: true,
+                    });
+                  }}
+                  isLoading={isLoading}
+                />
+              )}
 
-          {/* Section 15: Privacy */}
-          {activeSection === 'privacy' && <PrivacyPanel />}
+              {/* Section 14: Model Changes */}
+              {activeSection === 'model-changes' && (
+                <ModelChangesPanel
+                  catalogAnalysis={catalogAnalysis}
+                  rawCatalogObject={rawCatalogObject}
+                  snapshots={snapshots}
+                  testResults={testResults}
+                  onCaptureSnapshot={(customLabel) => {
+                    if (!rawCatalogObject || !catalogAnalysis) return;
+                    const now = new Date().toISOString();
+                    const newSnap: CatalogSnapshot = {
+                      id: `snap-${now}-${snapshots.length + 1}`,
+                      label:
+                        customLabel ||
+                        `Snapshot #${snapshots.length + 1} (${new Date(
+                          now
+                        ).toLocaleTimeString()})`,
+                      timestamp: now,
+                      totalModels: catalogAnalysis.totalModels,
+                      rawCatalog: rawCatalogObject,
+                    };
+                    setSnapshots((prev) => [...prev, newSnap]);
+                    setNotification({
+                      type: 'success',
+                      message: `Captured catalog snapshot: ${newSnap.label}`,
+                    });
+                  }}
+                  onImportSnapshot={(snap) => {
+                    setSnapshots((prev) => [...prev, snap]);
+                    setNotification({
+                      type: 'success',
+                      message: `Imported snapshot: ${snap.label}`,
+                    });
+                  }}
+                  onExecuteClaudeAliasTest={async (aliasModelId) => {
+                    await executeEndpointTest({
+                      endpointId: 'claude-alias-test',
+                      authFormat: 'x-api-key',
+                      selectedModelId: aliasModelId,
+                      customBodyRaw: JSON.stringify(
+                        {
+                          model: aliasModelId,
+                          max_tokens: 16,
+                          messages: [
+                            {
+                              role: 'user',
+                              content: 'Reply with: Alias test.',
+                            },
+                          ],
+                        },
+                        null,
+                        2
+                      ),
+                    });
+                  }}
+                  isLoading={isLoading}
+                />
+              )}
 
-          {/* Section 16: Test Reports */}
-          {activeSection === 'test-reports' && (
-            <TestReportsPanel
-              configStatus={configStatus}
-              activeAuthFormat={activeAuthFormat}
-              catalogAnalysis={catalogAnalysis}
-              testResults={testResults}
-            />
-          )}
-        </main>
+              {/* Section 15: Privacy */}
+              {activeSection === 'privacy' && <PrivacyPanel />}
+
+              {/* Section 16: Test Reports */}
+              {activeSection === 'test-reports' && (
+                <TestReportsPanel
+                  configStatus={configStatus}
+                  activeAuthFormat={activeAuthFormat}
+                  catalogAnalysis={catalogAnalysis}
+                  testResults={testResults}
+                />
+              )}
+            </main>
+          </div>
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }

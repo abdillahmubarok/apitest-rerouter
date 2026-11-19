@@ -6,7 +6,7 @@ const cspHeader = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' blob: data:",
+  "img-src 'self' blob: data: https://storage-mubarokah.s3.ap-southeast-3.amazonaws.com",
   "font-src 'self' data:",
   "connect-src 'self'",
   "object-src 'none'",
@@ -19,6 +19,20 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   cacheComponents: true,
   partialPrefetching: true,
+  images: {
+    dangerouslyAllowSVG: true,
+    contentDispositionType: 'attachment',
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'storage-mubarokah.s3.ap-southeast-3.amazonaws.com',
+        port: '',
+        pathname: '/rerouter/**',
+        search: '',
+      },
+    ],
+  },
   turbopack: {
     rules: {
       '*.css': {

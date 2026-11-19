@@ -1,6 +1,31 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  FileCode2,
+  Search,
+} from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import { Input } from '@/components/ui/input';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { inspectJsonRecursively } from '@/lib/rerouter/inspect-models';
 import type { JsonFieldEntry } from '@/lib/rerouter/types';
 
@@ -22,8 +47,8 @@ function syntaxHighlightJson(jsonStr: string): React.ReactNode[] {
       return (
         <div key={idx} className="leading-relaxed">
           <span>{indent}</span>
-          <span className="text-sky-400">&quot;{key}&quot;</span>
-          <span className="text-slate-400">: </span>
+          <span className="text-sky-700 dark:text-sky-400">&quot;{key}&quot;</span>
+          <span className="text-muted-foreground">: </span>
           {highlightValuePart(rest)}
         </div>
       );
@@ -42,22 +67,31 @@ function highlightValuePart(part: string): React.ReactNode {
   const core = hasComma ? trimmed.slice(0, -1) : trimmed;
   const leadingSpaces = part.match(/^\s*/)?.[0] ?? '';
 
-  let colorClass = 'text-slate-200';
+  let colorClass = 'text-foreground';
   if (core.startsWith('"') && core.endsWith('"')) {
-    colorClass = 'text-emerald-400';
+    colorClass = 'text-emerald-700 dark:text-emerald-400';
   } else if (/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(core)) {
-    colorClass = 'text-amber-300';
+    colorClass = 'text-amber-700 dark:text-amber-300';
   } else if (core === 'true' || core === 'false') {
-    colorClass = 'text-purple-400 font-semibold';
+    colorClass = 'text-purple-700 dark:text-purple-400 font-semibold';
   } else if (core === 'null') {
-    colorClass = 'text-rose-400 italic';
+    colorClass = 'text-rose-700 dark:text-rose-400 italic';
+  } else if (
+    core === '{' ||
+    core === '}' ||
+    core === '[' ||
+    core === ']' ||
+    core === '{}' ||
+    core === '[]'
+  ) {
+    colorClass = 'text-muted-foreground';
   }
 
   return (
     <>
       <span>{leadingSpaces}</span>
       <span className={colorClass}>{core}</span>
-      {hasComma && <span className="text-slate-400">,</span>}
+      {hasComma && <span className="text-muted-foreground">,</span>}
     </>
   );
 }
@@ -115,179 +149,182 @@ export function JsonViewer({
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch {
-      // Fallback ignored
+      // Clipboard fallback ignored
     }
   };
 
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-950/90 overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 bg-slate-900/90 border-b border-slate-800">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setExpanded(!expanded)}
-            className="text-xs font-mono text-slate-400 hover:text-slate-200 px-1.5 py-0.5 rounded bg-slate-800/80"
-            title={expanded ? 'Collapse section' : 'Expand section'}
-          >
-            {expanded ? '▼' : '▶'}
-          </button>
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">
-            {title}
-          </span>
-          {computedFields.length > 0 && (
-            <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">
-              {computedFields.length} JSON paths
-            </span>
-          )}
-        </div>
+    <Collapsible
+      open={expanded}
+      onOpenChange={setExpanded}
+      className="rounded-md border border-border bg-card overflow-hidden"
+    >
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => setActiveTab(v as 'json' | 'raw' | 'paths')}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-muted/40 border-b border-border">
+          <div className="flex items-center gap-2">
+            <CollapsibleTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                aria-label={expanded ? 'Collapse JSON viewer' : 'Expand JSON viewer'}
+              >
+                {expanded ? (
+                  <ChevronDown className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            </CollapsibleTrigger>
+            <FileCode2 className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-xs font-medium text-foreground">{title}</span>
+            {computedFields.length > 0 && (
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                {computedFields.length} paths
+              </Badge>
+            )}
+          </div>
 
-        <div className="flex items-center gap-1.5">
-          {hasParsedJson && (
-            <button
-              type="button"
-              onClick={() => setActiveTab('json')}
-              className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                activeTab === 'json'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-              }`}
-            >
-              Formatted JSON
-            </button>
-          )}
-          {rawText !== undefined && (
-            <button
-              type="button"
-              onClick={() => setActiveTab('raw')}
-              className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                activeTab === 'raw'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-              }`}
-            >
-              Raw Text ({rawText.length} chars)
-            </button>
-          )}
-          {hasParsedJson && (
-            <button
-              type="button"
-              onClick={() => setActiveTab('paths')}
-              className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                activeTab === 'paths'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-              }`}
-            >
-              Recursive Field Paths
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={handleCopy}
-            className="ml-1 px-2.5 py-1 rounded text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
-          >
-            {copied ? '✓ Copied' : 'Copy'}
-          </button>
-        </div>
-      </div>
-
-      {expanded && (
-        <div>
-          {activeTab === 'json' && hasParsedJson && (
-            <div
-              className={`p-3.5 overflow-auto font-mono text-xs ${maxHeightClass}`}
-            >
-              {formattedJson.length < 40000 ? (
-                syntaxHighlightJson(formattedJson)
-              ) : (
-                <pre className="text-slate-200 whitespace-pre-wrap break-all">
-                  {formattedJson}
-                </pre>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <TabsList>
+              {hasParsedJson && (
+                <TabsTrigger value="json">Formatted JSON</TabsTrigger>
               )}
-            </div>
+              {rawText !== undefined && (
+                <TabsTrigger value="raw">
+                  Raw ({rawText.length} chars)
+                </TabsTrigger>
+              )}
+              {hasParsedJson && (
+                <TabsTrigger value="paths">Field Paths</TabsTrigger>
+              )}
+            </TabsList>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleCopy}
+              className="h-7 px-2 text-xs"
+            >
+              {copied ? (
+                <>
+                  <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                  <span>Copied</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3 w-3" />
+                  <span>Copy</span>
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+
+        <CollapsibleContent>
+          {hasParsedJson && (
+            <TabsContent value="json" className="m-0">
+              <div
+                className={`p-3.5 overflow-auto font-mono text-xs bg-background/60 ${maxHeightClass}`}
+              >
+                {formattedJson.length < 40000 ? (
+                  syntaxHighlightJson(formattedJson)
+                ) : (
+                  <pre className="text-foreground whitespace-pre-wrap break-all">
+                    {formattedJson}
+                  </pre>
+                )}
+              </div>
+            </TabsContent>
           )}
 
-          {(activeTab === 'raw' || !hasParsedJson) && (
+          <TabsContent value="raw" className="m-0">
             <div
-              className={`p-3.5 overflow-auto font-mono text-xs text-slate-200 ${maxHeightClass}`}
+              className={`p-3.5 overflow-auto font-mono text-xs text-foreground bg-background/60 ${maxHeightClass}`}
             >
               <pre className="whitespace-pre-wrap break-all">
                 {rawText || formattedJson || '(empty response body)'}
               </pre>
             </div>
-          )}
+          </TabsContent>
 
-          {activeTab === 'paths' && hasParsedJson && (
-            <div className="p-3.5 space-y-2.5">
-              <div className="flex items-center justify-between gap-2">
-                <input
-                  type="text"
-                  value={pathFilter}
-                  onChange={(e) => setPathFilter(e.target.value)}
-                  placeholder="Filter by JSON path, field name, value, or data type (e.g. data[0].pricing.prompt)..."
-                  className="w-full px-3 py-1.5 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                />
-                <span className="text-xs font-mono text-slate-400 shrink-0">
-                  Showing {Math.min(filteredFields.length, 400)} of{' '}
-                  {filteredFields.length}
-                </span>
+          {hasParsedJson && (
+            <TabsContent value="paths" className="m-0">
+              <div className="p-3 space-y-2.5 bg-background/40">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="relative flex-1">
+                    <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      type="text"
+                      value={pathFilter}
+                      onChange={(e) => setPathFilter(e.target.value)}
+                      placeholder="Filter by JSON path, field name, value, or type (e.g. data[0].pricing.prompt)..."
+                      className="pl-8 font-mono text-xs"
+                    />
+                  </div>
+                  <span className="font-mono text-[11px] text-muted-foreground shrink-0">
+                    {Math.min(filteredFields.length, 400)} /{' '}
+                    {filteredFields.length}
+                  </span>
+                </div>
+
+                <div
+                  className={`overflow-auto ${maxHeightClass} rounded-md border border-border bg-card`}
+                >
+                  <Table className="font-mono">
+                    <TableHeader className="sticky top-0 bg-muted">
+                      <TableRow>
+                        <TableHead>Exact JSON Path</TableHead>
+                        <TableHead>Field Name</TableHead>
+                        <TableHead>Data Type</TableHead>
+                        <TableHead>Actual Value</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredFields.slice(0, 400).map((f, i) => (
+                        <TableRow key={`${f.path}-${i}`}>
+                          <TableCell className="text-sky-700 dark:text-sky-400 break-all">
+                            {f.path}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {f.fieldName}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                f.dataType === 'string'
+                                  ? 'success'
+                                  : f.dataType === 'number'
+                                    ? 'warning'
+                                    : f.dataType === 'boolean'
+                                      ? 'purple'
+                                      : f.dataType === 'null'
+                                        ? 'destructive'
+                                        : 'secondary'
+                              }
+                              className="uppercase text-[10px] px-1.5 py-0"
+                            >
+                              {f.dataType}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-foreground break-all max-w-md">
+                            {f.formattedValue}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
-              <div className={`overflow-auto ${maxHeightClass} border border-slate-800 rounded`}>
-                <table className="w-full text-left border-collapse text-xs font-mono">
-                  <thead className="bg-slate-900 text-slate-300 sticky top-0">
-                    <tr>
-                      <th className="py-2 px-2.5 border-b border-slate-800">
-                        Exact JSON Path
-                      </th>
-                      <th className="py-2 px-2.5 border-b border-slate-800">
-                        Field Name
-                      </th>
-                      <th className="py-2 px-2.5 border-b border-slate-800">
-                        Data Type
-                      </th>
-                      <th className="py-2 px-2.5 border-b border-slate-800">
-                        Actual Value
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/70">
-                    {filteredFields.slice(0, 400).map((f, i) => (
-                      <tr key={`${f.path}-${i}`} className="hover:bg-slate-900/50">
-                        <td className="py-1.5 px-2.5 text-sky-400 break-all">
-                          {f.path}
-                        </td>
-                        <td className="py-1.5 px-2.5 text-slate-300">
-                          {f.fieldName}
-                        </td>
-                        <td className="py-1.5 px-2.5">
-                          <span
-                            className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-semibold ${
-                              f.dataType === 'string'
-                                ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/60'
-                                : f.dataType === 'number'
-                                  ? 'bg-amber-950 text-amber-300 border border-amber-800/60'
-                                  : f.dataType === 'boolean'
-                                    ? 'bg-purple-950 text-purple-300 border border-purple-800/60'
-                                    : f.dataType === 'null'
-                                      ? 'bg-rose-950 text-rose-300 border border-rose-800/60'
-                                      : 'bg-slate-800 text-slate-300'
-                            }`}
-                          >
-                            {f.dataType}
-                          </span>
-                        </td>
-                        <td className="py-1.5 px-2.5 text-slate-200 break-all max-w-md">
-                          {f.formattedValue}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            </TabsContent>
           )}
-        </div>
-      )}
-    </div>
+        </CollapsibleContent>
+      </Tabs>
+    </Collapsible>
   );
 }

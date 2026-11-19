@@ -1,7 +1,23 @@
 'use client';
 
 import React, { useState } from 'react';
+import { AlertTriangle, Loader2, Play, Scissors } from 'lucide-react';
 import { TestResultView } from '@/components/endpoint-tester/TestResultView';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { CategoryBadge } from '@/components/ui/http-badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { NativeSelect } from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import type {
   CatalogAnalysis,
   TestExecutionResult,
@@ -81,20 +97,23 @@ export function CreditTruncationPanel({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header Banner */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 space-y-2">
+      <div className="rounded-md border border-border bg-card p-4 space-y-1.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-bold text-slate-100">
-            Credit Exhaustion & Output Truncation Investigation
-          </h2>
-          <span className="px-2.5 py-1 text-xs font-mono font-bold rounded bg-amber-950 text-amber-300 border border-amber-700">
+          <div className="flex items-center gap-2">
+            <Scissors className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-sm font-semibold text-foreground">
+              Credit Exhaustion & Output Truncation Investigation
+            </h2>
+          </div>
+          <Badge variant="warning">
             {latestCreditResult && latestCreditResult.ok
               ? 'EXECUTED WITH LOW-CREDIT KEY'
               : 'NOT VERIFIED — REQUIRES A DEDICATED LOW-CREDIT TEST KEY'}
-          </span>
+          </Badge>
         </div>
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-muted-foreground leading-relaxed">
           The documentation states that output length may be automatically
           reduced when remaining credit is insufficient. This section
           investigates actual truncation fields and compares ordinary{' '}
@@ -104,254 +123,267 @@ export function CreditTruncationPanel({
       </div>
 
       {/* 7-Point Verification Matrix */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 space-y-3">
-        <h3 className="text-sm font-bold text-slate-100">
-          7-Point Truncation Behavior Investigation Matrix
-        </h3>
-        <div className="overflow-x-auto border border-slate-800 rounded-lg">
-          <table className="w-full text-left border-collapse text-xs font-mono">
-            <thead className="bg-slate-950 text-slate-300">
-              <tr>
-                <th className="py-2 px-3 border-b border-slate-800">#</th>
-                <th className="py-2 px-3 border-b border-slate-800">
-                  Investigation Question
-                </th>
-                <th className="py-2 px-3 border-b border-slate-800">
-                  Verification Status
-                </th>
-                <th className="py-2 px-3 border-b border-slate-800">
-                  Observed Evidence
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/70">
-              <tr>
-                <td className="py-2 px-3 text-slate-400">1</td>
-                <td className="py-2 px-3 font-sans text-slate-200">
-                  Does a normal completion return{' '}
-                  <code className="font-mono">
-                    finish_reason: &quot;stop&quot;
-                  </code>
-                  ?
-                </td>
-                <td className="py-2 px-3">
-                  {normalChatResult ? (
-                    <span className="text-emerald-400 font-bold">OBSERVED</span>
-                  ) : (
-                    <span className="text-amber-300">AWAITING TEST 2</span>
-                  )}
-                </td>
-                <td className="py-2 px-3 text-slate-300">
-                  {normalChatResult
-                    ? `finish_reason = ${JSON.stringify(
-                        normalChatResult.finishReason
-                      )} at ${normalChatResult.finishReasonPath}`
-                    : 'Run TEST 2 (Chat Completions) with a valid key to observe.'}
-                </td>
-              </tr>
-              <tr>
-                <td className="py-2 px-3 text-slate-400">2</td>
-                <td className="py-2 px-3 font-sans text-slate-200">
-                  Does a token-limited completion (
-                  <code className="font-mono">max_tokens: 4</code>) return{' '}
-                  <code className="font-mono">
-                    finish_reason: &quot;length&quot;
-                  </code>
-                  ?
-                </td>
-                <td className="py-2 px-3">
-                  {tokenLimitResult?.ok ? (
-                    <span className="text-emerald-400 font-bold">OBSERVED</span>
-                  ) : (
-                    <span className="text-amber-300">NOT VERIFIED</span>
-                  )}
-                </td>
-                <td className="py-2 px-3 text-slate-300">
-                  {tokenLimitResult?.ok
-                    ? `finish_reason = ${JSON.stringify(
-                        tokenLimitResult.finishReason
-                      )}`
-                    : 'Run Ordinary Max-Token Truncation Test below to observe.'}
-                </td>
-              </tr>
-              <tr>
-                <td className="py-2 px-3 text-slate-400">3</td>
-                <td className="py-2 px-3 font-sans text-slate-200">
-                  Does a credit-limited completion return{' '}
-                  <code className="font-mono">
-                    finish_reason: &quot;length&quot;
-                  </code>
-                  ?
-                </td>
-                <td className="py-2 px-3 text-amber-300 font-bold">
+      <div className="rounded-md border border-border bg-card overflow-hidden">
+        <div className="px-4 py-3 border-b border-border bg-muted/20">
+          <h3 className="text-xs font-semibold text-foreground">
+            7-Point Truncation Behavior Investigation Matrix
+          </h3>
+        </div>
+        <Table className="font-mono">
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-10">#</TableHead>
+              <TableHead>Investigation Question</TableHead>
+              <TableHead>Verification Status</TableHead>
+              <TableHead>Observed Evidence</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow>
+              <TableCell className="text-muted-foreground">1</TableCell>
+              <TableCell className="font-sans text-foreground">
+                Does a normal completion return{' '}
+                <code className="font-mono">
+                  finish_reason: &quot;stop&quot;
+                </code>
+                ?
+              </TableCell>
+              <TableCell>
+                {normalChatResult ? (
+                  <Badge variant="success">OBSERVED</Badge>
+                ) : (
+                  <Badge variant="warning">AWAITING TEST 2</Badge>
+                )}
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {normalChatResult
+                  ? `finish_reason = ${JSON.stringify(
+                      normalChatResult.finishReason
+                    )} at ${normalChatResult.finishReasonPath}`
+                  : 'Run TEST 2 (Chat Completions) with a valid key to observe.'}
+              </TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell className="text-muted-foreground">2</TableCell>
+              <TableCell className="font-sans text-foreground">
+                Does a token-limited completion (
+                <code className="font-mono">max_tokens: 4</code>) return{' '}
+                <code className="font-mono">
+                  finish_reason: &quot;length&quot;
+                </code>
+                ?
+              </TableCell>
+              <TableCell>
+                {tokenLimitResult?.ok ? (
+                  <Badge variant="success">OBSERVED</Badge>
+                ) : (
+                  <Badge variant="warning">NOT VERIFIED</Badge>
+                )}
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {tokenLimitResult?.ok
+                  ? `finish_reason = ${JSON.stringify(
+                      tokenLimitResult.finishReason
+                    )}`
+                  : 'Run Ordinary Max-Token Truncation Test below to observe.'}
+              </TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell className="text-muted-foreground">3</TableCell>
+              <TableCell className="font-sans text-foreground">
+                Does a credit-limited completion return{' '}
+                <code className="font-mono">
+                  finish_reason: &quot;length&quot;
+                </code>
+                ?
+              </TableCell>
+              <TableCell>
+                <Badge variant="warning">
                   {latestCreditResult?.ok
                     ? `OBSERVED (${latestCreditResult.finishReason})`
-                    : 'NOT VERIFIED — REQUIRES A DEDICATED LOW-CREDIT TEST KEY'}
-                </td>
-                <td className="py-2 px-3 text-slate-300">
-                  {latestCreditResult?.ok
-                    ? `finish_reason = ${JSON.stringify(
-                        latestCreditResult.finishReason
-                      )}`
-                    : 'Cannot be assumed without reproducing mid-generation credit limit.'}
-                </td>
-              </tr>
-              <tr>
-                <td className="py-2 px-3 text-slate-400">4</td>
-                <td className="py-2 px-3 font-sans text-slate-200">
-                  Does streaming return an identifiable terminal chunk?
-                </td>
-                <td className="py-2 px-3">
-                  {streamChatResult ? (
-                    <span className="text-emerald-400 font-bold">OBSERVED</span>
-                  ) : (
-                    <span className="text-amber-300">AWAITING TEST 3</span>
-                  )}
-                </td>
-                <td className="py-2 px-3 text-slate-300">
-                  {streamChatResult?.streamInspection
-                    ? `[DONE] marker: ${streamChatResult.streamInspection.hasDoneMarker}, finish_reason: ${streamChatResult.streamInspection.finishReason}`
-                    : 'Run TEST 3 (Streaming Chat Completions) to observe.'}
-                </td>
-              </tr>
-              <tr>
-                <td className="py-2 px-3 text-slate-400">5</td>
-                <td className="py-2 px-3 font-sans text-slate-200">
-                  Are final usage and cost included?
-                </td>
-                <td className="py-2 px-3">
-                  {normalChatResult || latestCreditResult?.ok ? (
-                    <span className="text-emerald-400 font-bold">OBSERVED</span>
-                  ) : (
-                    <span className="text-amber-300">AWAITING LIVE TEST</span>
-                  )}
-                </td>
-                <td className="py-2 px-3 text-slate-300">
-                  {normalChatResult
-                    ? `Usage path: ${normalChatResult.usageAndCost.usagePath}, Cost path: ${normalChatResult.usageAndCost.costPath ?? 'Not present'}`
-                    : 'Awaiting authenticated completion response.'}
-                </td>
-              </tr>
-              <tr>
-                <td className="py-2 px-3 text-slate-400">6</td>
-                <td className="py-2 px-3 font-sans text-slate-200">
-                  Does any additional field identify credit-related truncation?
-                </td>
-                <td className="py-2 px-3 text-amber-300 font-bold">
-                  NOT VERIFIED — REQUIRES A DEDICATED LOW-CREDIT TEST KEY
-                </td>
-                <td className="py-2 px-3 text-slate-300">
-                  Must inspect recursive JSON fields of a genuine credit-limited
-                  response.
-                </td>
-              </tr>
-              <tr>
-                <td className="py-2 px-3 text-slate-400">7</td>
-                <td className="py-2 px-3 font-sans text-slate-200">
-                  Can credit-related truncation be distinguished from ordinary
-                  max-token truncation?
-                </td>
-                <td className="py-2 px-3 text-amber-300 font-bold">
-                  NOT VERIFIED — REQUIRES A DEDICATED LOW-CREDIT TEST KEY
-                </td>
-                <td className="py-2 px-3 text-slate-300">
-                  Requires side-by-side comparison of ordinary max_tokens=4
-                  response vs low-credit response.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+                    : 'NOT VERIFIED — REQUIRES LOW-CREDIT KEY'}
+                </Badge>
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {latestCreditResult?.ok
+                  ? `finish_reason = ${JSON.stringify(
+                      latestCreditResult.finishReason
+                    )}`
+                  : 'Cannot be assumed without reproducing mid-generation credit limit.'}
+              </TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell className="text-muted-foreground">4</TableCell>
+              <TableCell className="font-sans text-foreground">
+                Does streaming return an identifiable terminal chunk?
+              </TableCell>
+              <TableCell>
+                {streamChatResult ? (
+                  <Badge variant="success">OBSERVED</Badge>
+                ) : (
+                  <Badge variant="warning">AWAITING TEST 3</Badge>
+                )}
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {streamChatResult?.streamInspection
+                  ? `[DONE] marker: ${streamChatResult.streamInspection.hasDoneMarker}, finish_reason: ${streamChatResult.streamInspection.finishReason}`
+                  : 'Run TEST 3 (Streaming Chat Completions) to observe.'}
+              </TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell className="text-muted-foreground">5</TableCell>
+              <TableCell className="font-sans text-foreground">
+                Are final usage and cost included?
+              </TableCell>
+              <TableCell>
+                {normalChatResult || latestCreditResult?.ok ? (
+                  <Badge variant="success">OBSERVED</Badge>
+                ) : (
+                  <Badge variant="warning">AWAITING LIVE TEST</Badge>
+                )}
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {normalChatResult
+                  ? `Usage path: ${normalChatResult.usageAndCost.usagePath}, Cost path: ${normalChatResult.usageAndCost.costPath ?? 'Not present'}`
+                  : 'Awaiting authenticated completion response.'}
+              </TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell className="text-muted-foreground">6</TableCell>
+              <TableCell className="font-sans text-foreground">
+                Does any additional field identify credit-related truncation?
+              </TableCell>
+              <TableCell>
+                <Badge variant="warning">
+                  NOT VERIFIED — REQUIRES LOW-CREDIT KEY
+                </Badge>
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                Must inspect recursive JSON fields of a genuine credit-limited
+                response.
+              </TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell className="text-muted-foreground">7</TableCell>
+              <TableCell className="font-sans text-foreground">
+                Can credit-related truncation be distinguished from ordinary
+                max-token truncation?
+              </TableCell>
+              <TableCell>
+                <Badge variant="warning">
+                  NOT VERIFIED — REQUIRES LOW-CREDIT KEY
+                </Badge>
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                Requires side-by-side comparison of ordinary max_tokens=4
+                response vs low-credit response.
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
       </div>
 
-      {/* Two Test Panels: Ordinary Max-Token Truncation vs Dedicated CREDIT-LIMIT TEST */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* Divided 2-Column Test Workbench: Ordinary Max-Token Truncation vs Dedicated CREDIT-LIMIT TEST */}
+      <div className="rounded-md border border-border bg-card overflow-hidden grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-border">
         {/* Ordinary Max-Token Truncation Test */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 space-y-3 flex flex-col justify-between">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-100">
+        <div className="p-4 space-y-3 flex flex-col justify-between">
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-xs font-semibold text-foreground">
                 Baseline: Ordinary Max-Token Truncation Test
               </h3>
-              <span className="px-2 py-0.5 text-xs font-mono rounded bg-amber-950 text-amber-300 border border-amber-800">
-                Category B: Billable
-              </span>
+              <CategoryBadge category="B" />
             </div>
-            <p className="text-xs text-slate-400">
-              Sends a request with <code className="font-mono">max_tokens: 4</code>{' '}
-              to verify the baseline <code className="font-mono">finish_reason</code>{' '}
-              and response metadata when output is truncated by token limit.
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Sends a request with{' '}
+              <code className="font-mono">max_tokens: 4</code> to verify the
+              baseline <code className="font-mono">finish_reason</code> and
+              response metadata when output is truncated by token limit.
             </p>
-            <div className="p-2.5 rounded bg-amber-950/40 border border-amber-800/60 text-xs text-amber-200">
-              ⚠ This request may consume API credits.
-            </div>
+            <Alert variant="warning" className="py-2">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <AlertDescription className="text-xs">
+                This request may consume API credits.
+              </AlertDescription>
+            </Alert>
           </div>
 
-          <div className="space-y-2 pt-2">
-            <select
-              value={selectedModelId}
-              onChange={(e) => setSelectedModelId(e.target.value)}
-              className="w-full px-3 py-2 text-xs font-mono rounded bg-slate-950 border border-slate-700 text-slate-100"
-            >
-              {(catalogAnalysis?.chatModels ?? []).map((m) => (
-                <option key={m.modelId} value={m.modelId}>
-                  {m.modelId}
-                </option>
-              ))}
-            </select>
-            <button
+          <div className="space-y-2.5 pt-2">
+            <div className="space-y-1">
+              <Label htmlFor="truncation-baseline-model">Target Model ID</Label>
+              <NativeSelect
+                id="truncation-baseline-model"
+                value={selectedModelId}
+                onChange={(e) => setSelectedModelId(e.target.value)}
+              >
+                {(catalogAnalysis?.chatModels ?? []).map((m) => (
+                  <option key={m.modelId} value={m.modelId}>
+                    {m.modelId}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+            <Button
               type="button"
               onClick={() => onExecuteTokenLimitTest(selectedModelId)}
               disabled={isLoading}
-              className="w-full py-2 px-4 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors disabled:opacity-50"
+              className="w-full"
             >
-              {isLoading
-                ? 'Running...'
-                : '▶ Run Ordinary Max-Token Truncation Test (max_tokens: 4)'}
-            </button>
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>Running...</span>
+                </>
+              ) : (
+                <>
+                  <Play className="h-3.5 w-3.5" />
+                  <span>
+                    Run Ordinary Max-Token Truncation Test (max_tokens: 4)
+                  </span>
+                </>
+              )}
+            </Button>
           </div>
         </div>
 
         {/* Dedicated CREDIT-LIMIT TEST (Disabled by Default) */}
-        <div className="rounded-xl border border-purple-800/80 bg-purple-950/20 p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-purple-300">
+        <div className="p-4 space-y-3 bg-muted/10">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-xs font-semibold text-foreground">
               CREDIT-LIMIT TEST (Restricted — Category C)
             </h3>
-            <span className="px-2 py-0.5 text-xs font-mono rounded bg-purple-950 text-purple-300 border border-purple-700">
+            <Badge variant={creditTestEnabled ? 'purple' : 'secondary'}>
               {creditTestEnabled ? 'Unlocked by User' : 'Disabled by Default'}
-            </span>
+            </Badge>
           </div>
 
-          <p className="text-xs text-slate-300 leading-relaxed">
+          <p className="text-xs text-muted-foreground leading-relaxed">
             Only enable and run this test when a dedicated test API key with an
             intentionally low remaining credit balance is configured. Never use
             a production key or customer data.
           </p>
 
-          <label className="flex items-start gap-2.5 p-2.5 rounded bg-slate-950 border border-purple-800/60 cursor-pointer text-xs text-slate-200">
+          <label className="flex items-start gap-2.5 rounded-md border border-border bg-background p-2.5 cursor-pointer text-xs text-foreground">
             <input
               type="checkbox"
               checked={creditTestEnabled}
               onChange={(e) => setCreditTestEnabled(e.target.checked)}
-              className="mt-0.5"
+              className="mt-0.5 accent-primary"
             />
-            <span>
+            <span className="leading-relaxed">
               I confirm that I am using a dedicated low-credit test API key (not
               a production key) and explicitly authorize triggering{' '}
-              <code className="font-mono text-purple-300">
+              <code className="font-mono text-purple-700 dark:text-purple-400">
                 CREDIT-LIMIT TEST
               </code>
               .
             </span>
           </label>
 
-          <div className="grid grid-cols-2 gap-2.5 text-xs">
-            <div>
-              <label className="text-slate-400 block mb-1">
-                Requested max_tokens
-              </label>
-              <input
+          <div className="grid grid-cols-2 gap-2.5">
+            <div className="space-y-1">
+              <Label>Requested max_tokens</Label>
+              <Input
                 type="number"
                 min={16}
                 max={4096}
@@ -360,42 +392,40 @@ export function CreditTruncationPanel({
                 onChange={(e) =>
                   setRequestedMaxTokens(Number(e.target.value) || 512)
                 }
-                className="w-full px-3 py-1.5 font-mono rounded bg-slate-950 border border-slate-700 text-slate-100 disabled:opacity-40"
+                className="font-mono text-xs"
               />
             </div>
-            <div>
-              <label className="text-slate-400 block mb-1">
-                Execution Mode
-              </label>
-              <select
+            <div className="space-y-1">
+              <Label>Execution Mode</Label>
+              <NativeSelect
                 disabled={!creditTestEnabled}
                 value={useStreaming ? 'stream' : 'sync'}
                 onChange={(e) => setUseStreaming(e.target.value === 'stream')}
-                className="w-full px-3 py-1.5 font-mono rounded bg-slate-950 border border-slate-700 text-slate-100 disabled:opacity-40"
               >
                 <option value="sync">stream: false (JSON)</option>
                 <option value="stream">stream: true (SSE)</option>
-              </select>
+              </NativeSelect>
             </div>
           </div>
 
-          <div>
-            <label className="text-xs text-slate-400 block mb-1">
+          <div className="space-y-1">
+            <Label>
               Optional One-Time Low-Credit Test API Key (Leave blank to use
-              active in-memory session key; never stored or logged)
-            </label>
-            <input
+              active in-memory session key; never stored)
+            </Label>
+            <Input
               type="password"
               disabled={!creditTestEnabled}
               value={dedicatedKeyInput}
               onChange={(e) => setDedicatedKeyInput(e.target.value)}
               placeholder="Optional low-credit test key override..."
-              className="w-full px-3 py-1.5 text-xs font-mono rounded bg-slate-950 border border-slate-700 text-slate-100 disabled:opacity-40"
+              className="font-mono text-xs"
             />
           </div>
 
-          <button
+          <Button
             type="button"
+            variant="secondary"
             disabled={!creditTestEnabled || isLoading}
             onClick={() =>
               onExecuteCreditLimitTest({
@@ -405,110 +435,118 @@ export function CreditTruncationPanel({
                 dedicatedLowCreditKey: dedicatedKeyInput || undefined,
               })
             }
-            className="w-full py-2 px-4 rounded-lg text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-full"
           >
-            {isLoading ? 'Executing...' : '▶ Execute CREDIT-LIMIT TEST'}
-          </button>
+            {isLoading ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span>Executing...</span>
+              </>
+            ) : (
+              <>
+                <Play className="h-3.5 w-3.5" />
+                <span>Execute CREDIT-LIMIT TEST</span>
+              </>
+            )}
+          </Button>
         </div>
       </div>
 
       {/* Recorded Metrics Summary if Credit-Limit or Token-Limit Test Executed */}
       {(latestCreditResult || tokenLimitResult) && (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 space-y-3">
-          <h3 className="text-sm font-bold text-slate-100">
-            Recorded Truncation Telemetry Comparison
-          </h3>
-          <div className="overflow-x-auto border border-slate-800 rounded-lg">
-            <table className="w-full text-left border-collapse text-xs font-mono">
-              <thead className="bg-slate-950 text-slate-300">
-                <tr>
-                  <th className="py-2 px-3 border-b border-slate-800">
-                    Metric
-                  </th>
-                  <th className="py-2 px-3 border-b border-slate-800">
-                    Ordinary Max-Token Test (max_tokens: 4)
-                  </th>
-                  <th className="py-2 px-3 border-b border-slate-800">
-                    CREDIT-LIMIT TEST
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/70">
-                <tr>
-                  <td className="py-2 px-3 text-slate-400">HTTP Status</td>
-                  <td className="py-2 px-3 text-slate-200">
-                    {tokenLimitResult ? tokenLimitResult.httpStatus : 'Not run'}
-                  </td>
-                  <td className="py-2 px-3 text-slate-200">
-                    {latestCreditResult
-                      ? latestCreditResult.httpStatus
-                      : 'NOT VERIFIED'}
-                  </td>
-                </tr>
-                <tr>
-                  <td className="py-2 px-3 text-slate-400">
-                    Requested max_tokens
-                  </td>
-                  <td className="py-2 px-3 text-slate-200">4</td>
-                  <td className="py-2 px-3 text-slate-200">
-                    {latestCreditResult
-                      ? String(
-                          (
-                            latestCreditResult.parsedRequestBody as Record<
-                              string,
-                              unknown
-                            >
-                          )?.max_tokens ?? requestedMaxTokens
-                        )
-                      : 'N/A'}
-                  </td>
-                </tr>
-                <tr>
-                  <td className="py-2 px-3 text-slate-400">
-                    Returned Output Length
-                  </td>
-                  <td className="py-2 px-3 text-slate-200">
-                    {extractReturnedOutputLength(tokenLimitResult ?? null)}
-                  </td>
-                  <td className="py-2 px-3 text-slate-200">
-                    {extractReturnedOutputLength(latestCreditResult)}
-                  </td>
-                </tr>
-                <tr>
-                  <td className="py-2 px-3 text-slate-400">Finish Reason</td>
-                  <td className="py-2 px-3 text-sky-400">
-                    {tokenLimitResult?.finishReason ?? 'N/A'}
-                  </td>
-                  <td className="py-2 px-3 text-sky-400">
-                    {latestCreditResult?.finishReason ?? 'N/A'}
-                  </td>
-                </tr>
-                <tr>
-                  <td className="py-2 px-3 text-slate-400">
-                    Final Usage & Cost
-                  </td>
-                  <td className="py-2 px-3 text-emerald-300">
-                    {tokenLimitResult?.usageAndCost.rawUsageObject
-                      ? `${JSON.stringify(
-                          tokenLimitResult.usageAndCost.rawUsageObject
-                        )} (Cost: ${
-                          tokenLimitResult.usageAndCost.costValue ?? 'none'
-                        })`
-                      : 'N/A'}
-                  </td>
-                  <td className="py-2 px-3 text-emerald-300">
-                    {latestCreditResult?.usageAndCost.rawUsageObject
-                      ? `${JSON.stringify(
-                          latestCreditResult.usageAndCost.rawUsageObject
-                        )} (Cost: ${
-                          latestCreditResult.usageAndCost.costValue ?? 'none'
-                        })`
-                      : 'N/A'}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+        <div className="rounded-md border border-border bg-card overflow-hidden">
+          <div className="px-4 py-3 border-b border-border bg-muted/20">
+            <h3 className="text-xs font-semibold text-foreground">
+              Recorded Truncation Telemetry Comparison
+            </h3>
           </div>
+          <Table className="font-mono">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Metric</TableHead>
+                <TableHead>Ordinary Max-Token Test (max_tokens: 4)</TableHead>
+                <TableHead>CREDIT-LIMIT TEST</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow>
+                <TableCell className="text-muted-foreground">
+                  HTTP Status
+                </TableCell>
+                <TableCell className="text-foreground">
+                  {tokenLimitResult ? tokenLimitResult.httpStatus : 'Not run'}
+                </TableCell>
+                <TableCell className="text-foreground">
+                  {latestCreditResult
+                    ? latestCreditResult.httpStatus
+                    : 'NOT VERIFIED'}
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="text-muted-foreground">
+                  Requested max_tokens
+                </TableCell>
+                <TableCell className="text-foreground">4</TableCell>
+                <TableCell className="text-foreground">
+                  {latestCreditResult
+                    ? String(
+                        (
+                          latestCreditResult.parsedRequestBody as Record<
+                            string,
+                            unknown
+                          >
+                        )?.max_tokens ?? requestedMaxTokens
+                      )
+                    : 'N/A'}
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="text-muted-foreground">
+                  Returned Output Length
+                </TableCell>
+                <TableCell className="text-foreground">
+                  {extractReturnedOutputLength(tokenLimitResult ?? null)}
+                </TableCell>
+                <TableCell className="text-foreground">
+                  {extractReturnedOutputLength(latestCreditResult)}
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="text-muted-foreground">
+                  Finish Reason
+                </TableCell>
+                <TableCell className="text-sky-700 dark:text-sky-400">
+                  {tokenLimitResult?.finishReason ?? 'N/A'}
+                </TableCell>
+                <TableCell className="text-sky-700 dark:text-sky-400">
+                  {latestCreditResult?.finishReason ?? 'N/A'}
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="text-muted-foreground">
+                  Final Usage & Cost
+                </TableCell>
+                <TableCell className="text-emerald-700 dark:text-emerald-400">
+                  {tokenLimitResult?.usageAndCost.rawUsageObject
+                    ? `${JSON.stringify(
+                        tokenLimitResult.usageAndCost.rawUsageObject
+                      )} (Cost: ${
+                        tokenLimitResult.usageAndCost.costValue ?? 'none'
+                      })`
+                    : 'N/A'}
+                </TableCell>
+                <TableCell className="text-emerald-700 dark:text-emerald-400">
+                  {latestCreditResult?.usageAndCost.rawUsageObject
+                    ? `${JSON.stringify(
+                        latestCreditResult.usageAndCost.rawUsageObject
+                      )} (Cost: ${
+                        latestCreditResult.usageAndCost.costValue ?? 'none'
+                      })`
+                    : 'N/A'}
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
         </div>
       )}
 

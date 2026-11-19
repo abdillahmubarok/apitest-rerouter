@@ -1,7 +1,34 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
+import {
+  AlertTriangle,
+  Check,
+  Download,
+  GitCompare,
+  Loader2,
+  Play,
+  Plus,
+  Upload,
+} from 'lucide-react';
 import { TestResultView } from '@/components/endpoint-tester/TestResultView';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import {
+  CategoryBadge,
+  HttpMethodBadge,
+} from '@/components/ui/http-badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { NativeSelect } from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { compareCatalogSnapshots } from '@/lib/rerouter/inspect-models';
 import type {
   CatalogAnalysis,
@@ -124,72 +151,84 @@ export function ModelChangesPanel({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header & Lifecycle Policy Warning */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 space-y-3">
+      <div className="rounded-md border border-border bg-card p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-bold text-slate-100">
-              Model ID Format, Prefix Conventions & Catalog Snapshot Comparator
-            </h2>
-            <p className="text-xs text-slate-400">
-              Preserves exact model IDs from <code className="font-mono">/v1/models</code>{' '}
-              without adding or stripping prefixes, and tracks catalog diffs
-              over time.
+            <div className="flex items-center gap-2">
+              <GitCompare className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold text-foreground">
+                Model ID Format, Prefix Conventions & Catalog Snapshot
+                Comparator
+              </h2>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Preserves exact model IDs from{' '}
+              <code className="font-mono">/v1/models</code> without adding or
+              stripping prefixes, and tracks catalog diffs over time.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => onCaptureSnapshot()}
               disabled={!rawCatalogObject}
-              className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 transition-colors disabled:opacity-40"
             >
-              + Capture Snapshot in Session
-            </button>
-            <button
+              <Plus className="h-3.5 w-3.5" />
+              <span>Capture Snapshot in Session</span>
+            </Button>
+            <Button
               type="button"
+              size="sm"
               onClick={handleDownloadLiveSnapshot}
               disabled={!rawCatalogObject}
-              className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors disabled:opacity-40"
             >
-              ⬇ Download Timestamped /v1/models Snapshot (.json)
-            </button>
+              <Download className="h-3.5 w-3.5" />
+              <span>Download Timestamped Snapshot (.json)</span>
+            </Button>
           </div>
         </div>
 
-        <div className="p-3 rounded-lg bg-amber-950/35 border border-amber-800/70 text-xs text-amber-200">
-          <strong>Important Model Lifecycle Notice:</strong> A model
-          disappearing from <code className="font-mono">GET /v1/models</code>{' '}
-          does not conclusively prove it has been permanently retired. Do not
-          claim model lifecycle or deprecation guarantees unless the provider
-          supplies an explicit written policy.
-        </div>
+        <Alert variant="warning" className="py-2">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+          <AlertDescription className="text-xs">
+            <strong>Important Model Lifecycle Notice:</strong> A model
+            disappearing from <code className="font-mono">GET /v1/models</code>{' '}
+            does not conclusively prove it has been permanently retired. Do not
+            claim model lifecycle or deprecation guarantees unless the provider
+            supplies an explicit written policy.
+          </AlertDescription>
+        </Alert>
       </div>
 
       {/* Section 1: Exact Model ID Prefix Convention Audit */}
       {catalogAnalysis && (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 space-y-4">
-          <h3 className="text-sm font-bold text-slate-100">
-            1. Exact Model ID Prefix & Format Audit Across{' '}
-            {catalogAnalysis.totalModels} Models
-          </h3>
+        <div className="rounded-md border border-border bg-card overflow-hidden">
+          <div className="px-4 py-3 border-b border-border bg-muted/20">
+            <h3 className="text-xs font-semibold text-foreground">
+              1. Exact Model ID Prefix & Format Audit Across{' '}
+              {catalogAnalysis.totalModels} Models
+            </h3>
+          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs font-mono">
-            <div className="p-3.5 rounded-lg bg-slate-950 border border-slate-800 space-y-1.5">
-              <div className="text-slate-400">
+          <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-border border-b border-border font-mono text-xs">
+            <div className="p-3.5 space-y-1">
+              <div className="text-muted-foreground">
                 Models WITH Provider Prefix (<code>provider/model</code>)
               </div>
-              <div className="text-2xl font-bold text-sky-400">
+              <div className="text-xl font-semibold text-sky-700 dark:text-sky-400">
                 {catalogAnalysis.prefixAnalysis.totalWithSlashPrefix}
               </div>
-              <div className="text-[11px] text-slate-300">
+              <div className="text-[11px] text-foreground">
                 Observed prefixes:{' '}
                 {catalogAnalysis.prefixAnalysis.observedPrefixes
                   .map((p) => `${p}/`)
                   .join(', ')}
               </div>
-              <div className="text-[11px] text-slate-400 pt-1">
+              <div className="text-[11px] text-muted-foreground pt-0.5">
                 Examples:{' '}
                 {catalogAnalysis.prefixAnalysis.examplesWithPrefix
                   .slice(0, 4)
@@ -197,18 +236,18 @@ export function ModelChangesPanel({
               </div>
             </div>
 
-            <div className="p-3.5 rounded-lg bg-slate-950 border border-slate-800 space-y-1.5">
-              <div className="text-slate-400">
+            <div className="p-3.5 space-y-1">
+              <div className="text-muted-foreground">
                 Models WITHOUT Provider Prefix (Bare ID)
               </div>
-              <div className="text-2xl font-bold text-emerald-400">
+              <div className="text-xl font-semibold text-emerald-700 dark:text-emerald-400">
                 {catalogAnalysis.prefixAnalysis.totalWithoutSlashPrefix}
               </div>
-              <div className="text-[11px] text-slate-300">
+              <div className="text-[11px] text-foreground">
                 Includes OpenAI, Anthropic, Alibaba, DeepSeek, Typesafe, xAI,
                 Z.ai, etc.
               </div>
-              <div className="text-[11px] text-slate-400 pt-1">
+              <div className="text-[11px] text-muted-foreground pt-0.5">
                 Examples:{' '}
                 {catalogAnalysis.prefixAnalysis.examplesWithoutPrefix
                   .slice(0, 5)
@@ -216,15 +255,15 @@ export function ModelChangesPanel({
               </div>
             </div>
 
-            <div className="p-3.5 rounded-lg bg-slate-950 border border-slate-800 space-y-1.5">
-              <div className="text-slate-400">
+            <div className="p-3.5 space-y-1">
+              <div className="text-muted-foreground">
                 Models with Colon Variant Suffix (<code>:free</code>,{' '}
                 <code>:fast</code>, <code>:netra</code>)
               </div>
-              <div className="text-2xl font-bold text-purple-400">
+              <div className="text-xl font-semibold text-purple-700 dark:text-purple-400">
                 {catalogAnalysis.prefixAnalysis.totalWithColonTag}
               </div>
-              <div className="text-[11px] text-slate-300">
+              <div className="text-[11px] text-foreground">
                 Note: All 16 <code>:free</code> models have{' '}
                 <code>owned_by: &quot;&quot;</code> and include a{' '}
                 <code>provider/</code> prefix in <code>id</code>.
@@ -232,69 +271,63 @@ export function ModelChangesPanel({
             </div>
           </div>
 
-          {/* Provider-by-Provider ID Format Table */}
-          <div className="overflow-x-auto border border-slate-800 rounded-lg">
-            <table className="w-full text-left border-collapse text-xs font-mono">
-              <thead className="bg-slate-950 text-slate-300">
-                <tr>
-                  <th className="py-2 px-3 border-b border-slate-800">
-                    owned_by (Provider)
-                  </th>
-                  <th className="py-2 px-3 border-b border-slate-800">
-                    Count
-                  </th>
-                  <th className="py-2 px-3 border-b border-slate-800">
-                    Prefix Convention Observed
-                  </th>
-                  <th className="py-2 px-3 border-b border-slate-800">
-                    Exact Catalog Model IDs (Untransformed)
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/70">
-                {catalogAnalysis.providersFound.map((prov) => {
-                  const group = catalogAnalysis.models.filter(
-                    (m) => (m.provider || '(empty string)') === prov
-                  );
-                  const withSlash = group.filter(
-                    (m) => m.hasProviderPrefix
-                  ).length;
-                  return (
-                    <tr key={prov} className="hover:bg-slate-950/60">
-                      <td className="py-2 px-3 text-indigo-300 font-bold">
-                        {prov}
-                      </td>
-                      <td className="py-2 px-3 text-slate-200">
-                        {group.length}
-                      </td>
-                      <td className="py-2 px-3 text-slate-300">
-                        {withSlash === group.length
-                          ? 'Always prefixed (provider/model)'
-                          : withSlash === 0
-                            ? 'Unprefixed (bare model ID)'
-                            : 'Mixed'}
-                      </td>
-                      <td className="py-2 px-3 text-sky-400 break-all">
-                        {group.map((m) => m.modelId).join(', ')}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <Table className="font-mono">
+            <TableHeader>
+              <TableRow>
+                <TableHead>owned_by (Provider)</TableHead>
+                <TableHead>Count</TableHead>
+                <TableHead>Prefix Convention Observed</TableHead>
+                <TableHead>Exact Catalog Model IDs (Untransformed)</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {catalogAnalysis.providersFound.map((prov) => {
+                const group = catalogAnalysis.models.filter(
+                  (m) => (m.provider || '(empty string)') === prov
+                );
+                const withSlash = group.filter(
+                  (m) => m.hasProviderPrefix
+                ).length;
+                return (
+                  <TableRow key={prov}>
+                    <TableCell className="text-purple-700 dark:text-purple-400 font-semibold">
+                      {prov}
+                    </TableCell>
+                    <TableCell className="text-foreground">
+                      {group.length}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {withSlash === group.length
+                        ? 'Always prefixed (provider/model)'
+                        : withSlash === 0
+                          ? 'Unprefixed (bare model ID)'
+                          : 'Mixed'}
+                    </TableCell>
+                    <TableCell className="text-sky-700 dark:text-sky-400 break-all">
+                      {group.map((m) => m.modelId).join(', ')}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
         </div>
       )}
 
       {/* Section 2: Dated Claude Alias Verification Tool */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 space-y-3">
+      <div className="rounded-md border border-border bg-card p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h3 className="text-sm font-bold text-slate-100">
-              2. Dated Claude Alias Verification Tool (
-              <code className="text-sky-400">POST /v1/messages</code>)
-            </h3>
-            <p className="text-xs text-slate-400">
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs font-semibold text-foreground">
+                2. Dated Claude Alias Verification Tool
+              </h3>
+              <HttpMethodBadge method="POST" />
+              <code className="font-mono text-xs text-foreground">
+                /v1/messages
+              </code>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
               Catalog lists undated Anthropic IDs (
               <code className="font-mono">claude-haiku-4-5</code>,{' '}
               <code className="font-mono">claude-haiku-5-5</code>,{' '}
@@ -306,22 +339,23 @@ export function ModelChangesPanel({
               whether dated Claude aliases are accepted or mapped.
             </p>
           </div>
-          <span className="px-2 py-0.5 text-xs font-mono rounded bg-amber-950 text-amber-300 border border-amber-800">
-            Category B: Billable if Accepted
-          </span>
+          <CategoryBadge category="B" label="Category B · Billable if Accepted" />
         </div>
 
-        <div className="p-2.5 rounded bg-amber-950/40 border border-amber-800/60 text-xs text-amber-200">
-          ⚠ This request may consume API credits if the alias resolves to an
-          active model.
-        </div>
+        <Alert variant="warning" className="py-2">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+          <AlertDescription className="text-xs">
+            This request may consume API credits if the alias resolves to an
+            active model.
+          </AlertDescription>
+        </Alert>
 
         <div className="flex flex-wrap items-center gap-2">
-          <input
+          <Input
             type="text"
             value={aliasInput}
             onChange={(e) => setAliasInput(e.target.value)}
-            className="flex-1 min-w-[240px] px-3 py-2 text-xs font-mono rounded bg-slate-950 border border-slate-700 text-slate-100"
+            className="flex-1 min-w-[240px] font-mono text-xs"
             placeholder="Enter dated Claude alias..."
           />
           {[
@@ -329,23 +363,35 @@ export function ModelChangesPanel({
             'claude-3-7-sonnet-20250219',
             'claude-haiku-4-5-20251001',
           ].map((preset) => (
-            <button
+            <Button
               key={preset}
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => setAliasInput(preset)}
-              className="px-2.5 py-1.5 text-xs font-mono rounded bg-slate-800 hover:bg-slate-700 text-slate-300"
+              className="font-mono text-xs"
             >
               {preset}
-            </button>
+            </Button>
           ))}
-          <button
+          <Button
             type="button"
+            size="sm"
             onClick={() => onExecuteClaudeAliasTest(aliasInput)}
             disabled={isLoading || !aliasInput.trim()}
-            className="px-4 py-2 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors disabled:opacity-50"
           >
-            {isLoading ? 'Testing Alias...' : '▶ Test Claude Alias'}
-          </button>
+            {isLoading ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span>Testing Alias...</span>
+              </>
+            ) : (
+              <>
+                <Play className="h-3.5 w-3.5" />
+                <span>Test Claude Alias</span>
+              </>
+            )}
+          </Button>
         </div>
 
         {aliasResults.map((res) => (
@@ -354,46 +400,48 @@ export function ModelChangesPanel({
       </div>
 
       {/* Section 3: Snapshot Comparison Engine */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="rounded-md border border-border bg-card overflow-hidden">
+        <div className="px-4 py-3 border-b border-border bg-muted/20 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h3 className="text-sm font-bold text-slate-100">
+            <h3 className="text-xs font-semibold text-foreground">
               3. Model Catalog Snapshot Comparison Engine
             </h3>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-muted-foreground mt-0.5">
               Compare any two timestamped snapshots of{' '}
-              <code className="font-mono">/v1/models</code> to detect added/removed
-              models, pricing changes, capability changes, embedding dimension
-              changes, and metadata changes.
+              <code className="font-mono">/v1/models</code> to detect
+              added/removed models, pricing changes, capability changes,
+              embedding dimension changes, and metadata changes.
             </p>
           </div>
 
-          <label className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 cursor-pointer">
-            ⬆ Import Snapshot JSON File
-            <input
-              type="file"
-              accept=".json,application/json"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-          </label>
+          <Button asChild variant="outline" size="sm">
+            <label className="cursor-pointer">
+              <Upload className="h-3.5 w-3.5" />
+              <span>Import Snapshot JSON File</span>
+              <input
+                type="file"
+                accept=".json,application/json"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+            </label>
+          </Button>
         </div>
 
         {uploadError && (
-          <div className="p-2.5 rounded bg-rose-950/60 border border-rose-800 text-xs text-rose-200">
-            {uploadError}
+          <div className="p-3 border-b border-border">
+            <Alert variant="destructive">
+              <AlertDescription>{uploadError}</AlertDescription>
+            </Alert>
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-slate-400 block mb-1">
-              Baseline Snapshot (Snapshot A)
-            </label>
-            <select
+        <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border border-b border-border">
+          <div className="p-3.5 space-y-1.5">
+            <Label>Baseline Snapshot (Snapshot A)</Label>
+            <NativeSelect
               value={activeSnapshotA?.id ?? ''}
               onChange={(e) => setSnapshotAId(e.target.value)}
-              className="w-full px-3 py-2 text-xs font-mono rounded bg-slate-950 border border-slate-700 text-slate-100"
             >
               {snapshots.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -401,17 +449,14 @@ export function ModelChangesPanel({
                   {new Date(s.timestamp).toLocaleTimeString()})
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
 
-          <div>
-            <label className="text-xs text-slate-400 block mb-1">
-              Target Snapshot (Snapshot B)
-            </label>
-            <select
+          <div className="p-3.5 space-y-1.5">
+            <Label>Target Snapshot (Snapshot B)</Label>
+            <NativeSelect
               value={activeSnapshotB?.id ?? ''}
               onChange={(e) => setSnapshotBId(e.target.value)}
-              className="w-full px-3 py-2 text-xs font-mono rounded bg-slate-950 border border-slate-700 text-slate-100"
             >
               {snapshots.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -419,46 +464,58 @@ export function ModelChangesPanel({
                   {new Date(s.timestamp).toLocaleTimeString()})
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
         </div>
 
         {comparisonResult && (
-          <div className="space-y-3 pt-2">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 text-xs font-mono">
-              <div className="p-3 rounded-lg bg-slate-950 border border-slate-800">
-                <div className="text-slate-400">Newly Appearing IDs</div>
-                <div className="text-lg font-bold text-emerald-400 mt-0.5">
+          <div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-y sm:divide-y-0 sm:divide-x divide-border border-b border-border font-mono text-xs">
+              <div className="p-3.5">
+                <div className="text-[11px] text-muted-foreground">
+                  Newly Appearing IDs
+                </div>
+                <div className="text-lg font-semibold text-emerald-700 dark:text-emerald-400 mt-0.5">
                   {comparisonResult.addedModelIds.length}
                 </div>
               </div>
-              <div className="p-3 rounded-lg bg-slate-950 border border-slate-800">
-                <div className="text-slate-400">Disappeared IDs</div>
-                <div className="text-lg font-bold text-rose-400 mt-0.5">
+              <div className="p-3.5">
+                <div className="text-[11px] text-muted-foreground">
+                  Disappeared IDs
+                </div>
+                <div className="text-lg font-semibold text-red-700 dark:text-red-400 mt-0.5">
                   {comparisonResult.removedModelIds.length}
                 </div>
               </div>
-              <div className="p-3 rounded-lg bg-slate-950 border border-slate-800">
-                <div className="text-slate-400">Changed Pricing</div>
-                <div className="text-lg font-bold text-amber-300 mt-0.5">
+              <div className="p-3.5">
+                <div className="text-[11px] text-muted-foreground">
+                  Changed Pricing
+                </div>
+                <div className="text-lg font-semibold text-amber-700 dark:text-amber-400 mt-0.5">
                   {comparisonResult.pricingChanges.length}
                 </div>
               </div>
-              <div className="p-3 rounded-lg bg-slate-950 border border-slate-800">
-                <div className="text-slate-400">Changed Capabilities</div>
-                <div className="text-lg font-bold text-sky-400 mt-0.5">
+              <div className="p-3.5">
+                <div className="text-[11px] text-muted-foreground">
+                  Changed Capabilities
+                </div>
+                <div className="text-lg font-semibold text-sky-700 dark:text-sky-400 mt-0.5">
                   {comparisonResult.capabilityChanges.length}
                 </div>
               </div>
-              <div className="p-3 rounded-lg bg-slate-950 border border-slate-800">
-                <div className="text-slate-400">Changed Dimensions</div>
-                <div className="text-lg font-bold text-indigo-400 mt-0.5">
+              <div className="p-3.5">
+                <div className="text-[11px] text-muted-foreground">
+                  Changed Dimensions
+                </div>
+                <div className="text-lg font-semibold text-purple-700 dark:text-purple-400 mt-0.5">
                   {comparisonResult.embeddingDimensionChanges.length}
                 </div>
               </div>
-              <div className="p-3 rounded-lg bg-slate-950 border border-slate-800">
-                <div className="text-slate-400">Changed Metadata</div>
-                <div className="text-lg font-bold text-slate-200 mt-0.5">
+              <div className="p-3.5">
+                <div className="text-[11px] text-muted-foreground">
+                  Changed Metadata
+                </div>
+                <div className="text-lg font-semibold text-foreground mt-0.5">
                   {comparisonResult.metadataChanges.length}
                 </div>
               </div>
@@ -470,23 +527,31 @@ export function ModelChangesPanel({
             comparisonResult.capabilityChanges.length === 0 &&
             comparisonResult.embeddingDimensionChanges.length === 0 &&
             comparisonResult.metadataChanges.length === 0 ? (
-              <div className="p-4 rounded-lg bg-slate-950 border border-slate-800 text-xs font-mono text-emerald-400">
-                ✓ Snapshot A and Snapshot B are identical across all{' '}
-                {comparisonResult.snapshotB.totalModels} models and all fields.
+              <div className="p-4 font-mono text-xs text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
+                <Check className="h-3.5 w-3.5" />
+                <span>
+                  Snapshot A and Snapshot B are identical across all{' '}
+                  {comparisonResult.snapshotB.totalModels} models and all
+                  fields.
+                </span>
               </div>
             ) : (
-              <div className="space-y-3 text-xs font-mono">
+              <div className="p-4 space-y-3 font-mono text-xs">
                 {comparisonResult.addedModelIds.length > 0 && (
-                  <div className="p-3 rounded bg-emerald-950/30 border border-emerald-800 text-emerald-300">
-                    <strong>Newly Appearing Model IDs:</strong>{' '}
-                    {comparisonResult.addedModelIds.join(', ')}
-                  </div>
+                  <Alert variant="success">
+                    <AlertDescription>
+                      <strong>Newly Appearing Model IDs:</strong>{' '}
+                      {comparisonResult.addedModelIds.join(', ')}
+                    </AlertDescription>
+                  </Alert>
                 )}
                 {comparisonResult.removedModelIds.length > 0 && (
-                  <div className="p-3 rounded bg-rose-950/30 border border-rose-800 text-rose-300">
-                    <strong>Disappeared Model IDs:</strong>{' '}
-                    {comparisonResult.removedModelIds.join(', ')}
-                  </div>
+                  <Alert variant="destructive">
+                    <AlertDescription>
+                      <strong>Disappeared Model IDs:</strong>{' '}
+                      {comparisonResult.removedModelIds.join(', ')}
+                    </AlertDescription>
+                  </Alert>
                 )}
                 {[
                   ...comparisonResult.pricingChanges,
@@ -494,54 +559,44 @@ export function ModelChangesPanel({
                   ...comparisonResult.embeddingDimensionChanges,
                   ...comparisonResult.metadataChanges,
                 ].length > 0 && (
-                  <div className="overflow-x-auto border border-slate-800 rounded">
-                    <table className="w-full text-left border-collapse">
-                      <thead className="bg-slate-950 text-slate-300">
-                        <tr>
-                          <th className="py-2 px-3 border-b border-slate-800">
-                            Model ID
-                          </th>
-                          <th className="py-2 px-3 border-b border-slate-800">
-                            Category
-                          </th>
-                          <th className="py-2 px-3 border-b border-slate-800">
-                            Field Path
-                          </th>
-                          <th className="py-2 px-3 border-b border-slate-800">
-                            Snapshot A Value
-                          </th>
-                          <th className="py-2 px-3 border-b border-slate-800">
-                            Snapshot B Value
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/70">
+                  <div className="rounded-md border border-border overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Model ID</TableHead>
+                          <TableHead>Category</TableHead>
+                          <TableHead>Field Path</TableHead>
+                          <TableHead>Snapshot A Value</TableHead>
+                          <TableHead>Snapshot B Value</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
                         {[
                           ...comparisonResult.pricingChanges,
                           ...comparisonResult.capabilityChanges,
                           ...comparisonResult.embeddingDimensionChanges,
                           ...comparisonResult.metadataChanges,
                         ].map((d, idx) => (
-                          <tr key={idx}>
-                            <td className="py-1.5 px-3 text-sky-400">
+                          <TableRow key={idx}>
+                            <TableCell className="text-sky-700 dark:text-sky-400">
                               {d.modelId}
-                            </td>
-                            <td className="py-1.5 px-3 text-slate-300">
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
                               {d.category}
-                            </td>
-                            <td className="py-1.5 px-3 text-indigo-300">
+                            </TableCell>
+                            <TableCell className="text-purple-700 dark:text-purple-400">
                               {d.fieldPath}
-                            </td>
-                            <td className="py-1.5 px-3 text-rose-300">
+                            </TableCell>
+                            <TableCell className="text-red-700 dark:text-red-400">
                               {JSON.stringify(d.oldValue)}
-                            </td>
-                            <td className="py-1.5 px-3 text-emerald-300">
+                            </TableCell>
+                            <TableCell className="text-emerald-700 dark:text-emerald-400">
                               {JSON.stringify(d.newValue)}
-                            </td>
-                          </tr>
+                            </TableCell>
+                          </TableRow>
                         ))}
-                      </tbody>
-                    </table>
+                      </TableBody>
+                    </Table>
                   </div>
                 )}
               </div>
