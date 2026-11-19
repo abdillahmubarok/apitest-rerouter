@@ -1,14 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connection } from 'next/server';
 import { executeRerouterTest } from '@/lib/rerouter/client';
-import { getPublicConfigStatus } from '@/lib/rerouter/config';
+import {
+  extractUserApiKeyFromHeaders,
+  getPublicConfigStatus,
+  STANDARD_SECURITY_HEADERS,
+  USER_AUTH_FORMAT_HEADER,
+} from '@/lib/rerouter/config';
 import { analyzeModelCatalog } from '@/lib/rerouter/inspect-models';
+import { validateProxyRequestSecurity } from '@/lib/rerouter/security';
 import type { AuthFormat } from '@/lib/rerouter/types';
 
 export async function GET(request: NextRequest) {
   await connection();
+  const securityViolation = validateProxyRequestSecurity(request);
+  if (securityViolation) {
+    return securityViolation;
+  }
 
-  const authParam = request.nextUrl.searchParams.get('authFormat');
+  const userApiKey = extractUserApiKeyFromHeaders(request.headers);
+  const headerAuth = request.headers.get(USER_AUTH_FORMAT_HEADER);
+  const authParam = headerAuth || request.nextUrl.searchParams.get('authFormat');
   const authFormat: AuthFormat =
     authParam === 'x-api-key' ||
     authParam === 'none' ||
@@ -16,10 +28,11 @@ export async function GET(request: NextRequest) {
       ? authParam
       : 'bearer';
 
-  const configStatus = getPublicConfigStatus();
+  const configStatus = getPublicConfigStatus(Boolean(userApiKey));
   const testResult = await executeRerouterTest({
     endpointId: 'models',
     authFormat,
+    userApiKey,
   });
 
   const catalogAnalysis =
@@ -34,9 +47,7 @@ export async function GET(request: NextRequest) {
       catalogAnalysis,
     },
     {
-      headers: {
-        'Cache-Control': 'no-store, max-age=0',
-      },
+      headers: STANDARD_SECURITY_HEADERS,
     }
   );
 }

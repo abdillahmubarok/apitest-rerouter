@@ -1,13 +1,23 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { connection } from 'next/server';
-import { getPublicConfigStatus } from '@/lib/rerouter/config';
+import {
+  extractUserApiKeyFromHeaders,
+  getPublicConfigStatus,
+  STANDARD_SECURITY_HEADERS,
+} from '@/lib/rerouter/config';
+import { validateProxyRequestSecurity } from '@/lib/rerouter/security';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   await connection();
-  const status = getPublicConfigStatus();
+  const securityViolation = validateProxyRequestSecurity(request);
+  if (securityViolation) {
+    return securityViolation;
+  }
+
+  const userKey = extractUserApiKeyFromHeaders(request.headers);
+  const status = getPublicConfigStatus(Boolean(userKey));
+
   return NextResponse.json(status, {
-    headers: {
-      'Cache-Control': 'no-store, max-age=0',
-    },
+    headers: STANDARD_SECURITY_HEADERS,
   });
 }

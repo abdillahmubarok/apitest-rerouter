@@ -1,6 +1,11 @@
 'use client';
 
 import React from 'react';
+import {
+  OFFICIAL_BILLING_URL,
+  OFFICIAL_DOCS_URL,
+  useRerouterSession,
+} from '@/context/RerouterSessionContext';
 import type {
   AuthFormat,
   CatalogAnalysis,
@@ -32,26 +37,43 @@ export function OverviewPanel({
   onNavigateSection,
   isLoading,
 }: OverviewPanelProps) {
+  const {
+    isConnected,
+    connectionState,
+    balanceState,
+    balanceNote,
+    lastVerifiedAt,
+    disconnect,
+  } = useRerouterSession();
+
   const totalTests = testResults.length;
   const successfulTests = testResults.filter((r) => r.ok).length;
   const failedTests = totalTests - successfulTests;
 
   const latestResult = testResults[0] ?? null;
   const lastSuccessfulRequest =
-    testResults.find((r) => r.ok && r.httpStatus >= 200 && r.httpStatus < 300) ??
-    null;
+    testResults.find(
+      (r) => r.ok && r.httpStatus >= 200 && r.httpStatus < 300
+    ) ?? null;
 
   const latestWithCost =
     testResults.find((r) => r.usageAndCost.costValue !== null) ?? null;
 
-  // Never invent a connection status: derive strictly from real API responses
-  let connectionStatusLabel = 'NOT TESTED YET';
+  // Derive connection status strictly from live API responses
+  let connectionStatusLabel = `STATE: ${connectionState}`;
   let connectionStatusColor = 'text-slate-400';
-  if (lastSuccessfulRequest) {
-    connectionStatusLabel = `CONNECTED (Verified via ${lastSuccessfulRequest.method} ${lastSuccessfulRequest.exactUrl} → HTTP ${lastSuccessfulRequest.httpStatus})`;
+  if (isConnected && lastSuccessfulRequest) {
+    connectionStatusLabel = `CONNECTED (${lastSuccessfulRequest.method} ${lastSuccessfulRequest.exactUrl.replace(
+      'https://rerouter.mubarokah.com',
+      ''
+    )} → HTTP ${lastSuccessfulRequest.httpStatus})`;
+    connectionStatusColor = 'text-emerald-400';
+  } else if (isConnected) {
+    connectionStatusLabel =
+      'CONNECTED (Verified via POST /v1/messages/count_tokens)';
     connectionStatusColor = 'text-emerald-400';
   } else if (latestResult && latestResult.httpStatus > 0) {
-    connectionStatusLabel = `REACHABLE (HTTP ${latestResult.httpStatus} returned from ${latestResult.exactUrl})`;
+    connectionStatusLabel = `REACHABLE (HTTP ${latestResult.httpStatus})`;
     connectionStatusColor = 'text-amber-300';
   } else if (latestResult && latestResult.httpStatus === 0) {
     connectionStatusLabel = `CONNECTION ERROR (${
@@ -72,15 +94,13 @@ export function OverviewPanel({
     (r) => r.httpStatus === 401 || r.httpStatus === 403
   );
 
-  let authStatusLabel = 'UNVERIFIED (No authenticated endpoint tested yet)';
-  let authStatusColor = 'text-slate-300';
+  let authStatusLabel = isConnected
+    ? 'VERIFIED (Non-billable POST /v1/messages/count_tokens)'
+    : 'NOT CONNECTED (Enter your ReRouter API key)';
+  let authStatusColor = isConnected ? 'text-emerald-400' : 'text-amber-400';
   if (verifiedAuthSuccess) {
     authStatusLabel = `VERIFIED (HTTP ${verifiedAuthSuccess.httpStatus} on ${verifiedAuthSuccess.label})`;
     authStatusColor = 'text-emerald-400';
-  } else if (!configStatus?.apiKeyConfigured) {
-    authStatusLabel =
-      'API KEY NOT CONFIGURED (Set REROUTER_API_KEY in .env.local)';
-    authStatusColor = 'text-amber-400';
   } else if (authRejected) {
     authStatusLabel = `REJECTED (HTTP ${authRejected.httpStatus}: ${
       authRejected.errorAnalysis?.readableMessage || 'Authentication failed'
@@ -90,50 +110,72 @@ export function OverviewPanel({
 
   return (
     <div className="space-y-6">
-      {/* Missing API Key Non-Blocking Configuration Notice */}
-      {configStatus && !configStatus.apiKeyConfigured && (
-        <div className="rounded-xl border border-amber-700/80 bg-amber-950/35 p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 text-amber-300 font-semibold text-sm">
-              <span>⚠</span>
-              <span>
-                Configuration Notice: REROUTER_API_KEY is not configured in{' '}
-                <code className="font-mono bg-amber-950 px-1.5 py-0.5 rounded">
-                  .env.local
-                </code>
+      {/* BYOK Session & Balance Transparency Banner */}
+      <div className="rounded-xl border border-indigo-800/70 bg-indigo-950/25 p-4 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+            <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700 font-bold">
+              {isConnected ? '● BYOK SESSION ACTIVE' : '○ NOT CONNECTED'}
+            </span>
+            <span className="px-2 py-0.5 rounded bg-slate-900 text-sky-300 border border-slate-800">
+              Storage: React In-Memory Only (No DB / No Persistent Browser Storage)
+            </span>
+            <span className="px-2 py-0.5 rounded bg-slate-900 text-amber-300 border border-slate-800">
+              Balance:{' '}
+              {balanceState === 'BALANCE_EMPTY'
+                ? 'EMPTY (HTTP 402)'
+                : 'UNKNOWN / NOT AVAILABLE'}
+            </span>
+            {lastVerifiedAt && (
+              <span className="text-slate-400">
+                Verified at {new Date(lastVerifiedAt).toLocaleTimeString()}
               </span>
-            </div>
-            <p className="text-xs text-amber-200/90 leading-relaxed">
-              The console remains fully operational. Public endpoints (such as{' '}
-              <code className="font-mono">GET /v1/models</code>) and safe
-              negative error/header investigations work immediately. To run
-              authenticated billable tests, create{' '}
-              <code className="font-mono">.env.local</code> in the project root
-              with <code className="font-mono">REROUTER_API_KEY=your_key</code>{' '}
-              (loaded dynamically on the server without exposing the key to the
-              browser).
-            </p>
+            )}
           </div>
-          <button
-            type="button"
-            onClick={onRefreshModels}
-            disabled={isLoading}
-            className="shrink-0 px-3.5 py-2 rounded-lg text-xs font-semibold bg-amber-600 hover:bg-amber-500 text-slate-950 transition-colors disabled:opacity-50"
-          >
-            Re-check .env.local & Refresh
-          </button>
+          <p className="text-xs text-slate-300 leading-relaxed pt-0.5">
+            {balanceNote}
+          </p>
         </div>
-      )}
+
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <a
+            href={OFFICIAL_DOCS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-sky-400 border border-slate-700 transition-colors"
+          >
+            📖 Official Docs ↗
+          </a>
+          <a
+            href={OFFICIAL_BILLING_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-slate-700 transition-colors"
+          >
+            💳 ReRouter Billing ↗
+          </a>
+          {isConnected && (
+            <button
+              type="button"
+              onClick={() => disconnect()}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-950 hover:bg-rose-900 text-rose-200 border border-rose-800 transition-colors"
+            >
+              Disconnect Session
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Top Controls Bar */}
       <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-1">
           <h2 className="text-base font-bold text-slate-100">
-            ReRouter Live Verification & Telemetry Overview
+            ReRouter API Playground — Live Verification & Telemetry Overview
           </h2>
           <p className="text-xs text-slate-400">
             All metrics below are populated strictly from live HTTP responses
-            originating from server-side Next.js Route Handlers.
+            executed during your current in-memory session via same-origin
+            Next.js Route Handlers.
           </p>
         </div>
 
@@ -221,20 +263,20 @@ export function OverviewPanel({
 
         <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60">
           <div className="text-xs text-slate-400 uppercase tracking-wider">
-            4. API Key Configured
+            4. BYOK In-Memory Session Key
           </div>
           <div className="mt-1.5 flex items-center gap-2">
             <span
               className={`px-2 py-0.5 text-xs font-mono font-bold rounded ${
-                configStatus?.apiKeyConfigured
+                isConnected
                   ? 'bg-emerald-950 text-emerald-300 border border-emerald-700'
                   : 'bg-amber-950 text-amber-300 border border-amber-700'
               }`}
             >
-              {configStatus?.apiKeyConfigured ? 'Yes' : 'No'}
+              {isConnected ? 'Active' : 'Disconnected'}
             </span>
             <span className="text-[11px] text-slate-400 truncate">
-              ({configStatus?.keySource ?? 'checking'})
+              (in-memory only)
             </span>
           </div>
         </div>
@@ -349,7 +391,9 @@ export function OverviewPanel({
               <div className="text-lg font-bold text-slate-100 mt-0.5">
                 {catalogAnalysis.chatModels.length}
               </div>
-              <div className="text-[11px] text-slate-500">mode = &quot;chat&quot;</div>
+              <div className="text-[11px] text-slate-500">
+                mode = &quot;chat&quot;
+              </div>
             </div>
             <div className="p-3 rounded-lg bg-slate-950 border border-slate-800">
               <div className="text-slate-400">Embedding Models</div>
@@ -386,21 +430,36 @@ export function OverviewPanel({
       <div className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
         <div className="px-4 py-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
           <h3 className="text-sm font-bold text-slate-200">
-            Executed API Requests in Current Session ({testResults.length})
+            Executed API Requests in Current In-Memory Session (
+            {testResults.length})
           </h3>
           <button
             type="button"
             onClick={() => onNavigateSection('test-reports')}
             className="text-xs font-medium text-indigo-400 hover:text-indigo-300"
           >
-            View & Download Full Test Report →
+            View & Download Session Test Report →
           </button>
         </div>
 
         {testResults.length === 0 ? (
-          <div className="p-8 text-center text-xs text-slate-400">
-            No API tests executed yet. Click &quot;Run All Category A Safe
-            Tests&quot; above or select an endpoint from the sidebar.
+          <div className="p-8 text-center text-xs text-slate-400 space-y-2">
+            <div>
+              No API tests executed yet in this session. Click &quot;Run All
+              Category A Safe Tests&quot; above or select an endpoint from the
+              sidebar.
+            </div>
+            <div>
+              Need reference examples? Visit{' '}
+              <a
+                href={OFFICIAL_DOCS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sky-400 underline hover:text-sky-300"
+              >
+                ReRouter Official Documentation ↗
+              </a>
+            </div>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -422,7 +481,7 @@ export function OverviewPanel({
                     Duration
                   </th>
                   <th className="py-2.5 px-3 border-b border-slate-800">
-                    Summary / Error
+                    Summary / Error Classification
                   </th>
                 </tr>
               </thead>
@@ -461,7 +520,7 @@ export function OverviewPanel({
                     </td>
                     <td className="py-2 px-3 text-slate-300 max-w-xs truncate">
                       {r.errorAnalysis
-                        ? `Error (${r.errorAnalysis.detectedFormat}): ${r.errorAnalysis.readableMessage}`
+                        ? `${r.errorAnalysis.errorCategoryLabel}: ${r.errorAnalysis.readableMessage}`
                         : r.endpointId === 'models'
                           ? 'Model catalog fetched'
                           : r.finishReason

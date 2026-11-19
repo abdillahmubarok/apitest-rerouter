@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
 import {
   getServerRerouterConfig,
+  isPlaceholderKey,
+  OFFICIAL_BILLING_URL,
   redactRequestHeaders,
   redactSecretString,
 } from './config';
@@ -18,14 +20,19 @@ import {
 } from './parser';
 import type {
   AuthFormat,
+  BalanceState,
   CatalogAnalysis,
+  ConnectionState,
+  ConnectionVerificationResponse,
   EndpointId,
   TestExecutionResult,
+  UserAuthFormat,
 } from './types';
 
 export interface ExecuteTestOptions {
   endpointId: EndpointId;
   authFormat?: AuthFormat;
+  userApiKey?: string | null;
   customBodyRaw?: string | null;
   selectedModelId?: string;
   catalogAnalysis?: CatalogAnalysis | null;
@@ -34,6 +41,7 @@ export interface ExecuteTestOptions {
 
 const DUMMY_INVALID_KEY = 'sk-rerouter-invalid-dummy-key-000000';
 const REQUEST_TIMEOUT_MS = 45000;
+export const MAX_PROXY_BODY_BYTES = 256 * 1024; // 256 KB reasonable proxy payload limit
 
 export async function executeRerouterTest(
   options: ExecuteTestOptions
@@ -45,12 +53,21 @@ export async function executeRerouterTest(
   const basePrefix = def.useRootOrigin ? cfg.rootOriginUrl : cfg.baseUrl;
   const exactUrl = `${basePrefix}${def.path}`;
 
-  const activeSecretKey =
+  const rawUserKey =
+    options.userApiKey && !isPlaceholderKey(options.userApiKey)
+      ? options.userApiKey.trim()
+      : null;
+
+  const rawLowCreditKey =
     options.endpointId === 'credit-limit-test' &&
     options.dedicatedLowCreditKey &&
-    options.dedicatedLowCreditKey.trim().length > 0
+    !isPlaceholderKey(options.dedicatedLowCreditKey)
       ? options.dedicatedLowCreditKey.trim()
-      : cfg.apiKey;
+      : null;
+
+  // Strictly per-request key. Never falls back to any server environment variable.
+  const activeSecretKey = rawLowCreditKey ?? rawUserKey;
+  const userKeySupplied = Boolean(activeSecretKey);
 
   const headers: Record<string, string> = {
     Accept: def.expectStream
@@ -78,6 +95,7 @@ export async function executeRerouterTest(
       def.defaultAuthFormat === 'x-api-key'
     ) {
       headers['x-api-key'] = DUMMY_INVALID_KEY;
+      headers['anthropic-version'] = '2023-06-01';
     } else {
       headers['Authorization'] = `Bearer ${DUMMY_INVALID_KEY}`;
     }
@@ -87,15 +105,16 @@ export async function executeRerouterTest(
       headers['Authorization'] = `Bearer ${activeSecretKey}`;
     } else {
       notes.push(
-        'REROUTER_API_KEY is not configured in .env.local; request sent without Authorization header.'
+        'No user API key supplied in request headers; sent without Authorization header.'
       );
     }
   } else if (authFormat === 'x-api-key') {
+    headers['anthropic-version'] = '2023-06-01';
     if (activeSecretKey) {
       headers['x-api-key'] = activeSecretKey;
     } else {
       notes.push(
-        'REROUTER_API_KEY is not configured in .env.local; request sent without x-api-key header.'
+        'No user API key supplied in request headers; sent without x-api-key header.'
       );
     }
   }
@@ -118,9 +137,19 @@ export async function executeRerouterTest(
     }
   }
 
-  const redactedRequestHeaders = redactRequestHeaders(headers, activeSecretKey);
+  const redactedRequestHeaders = redactRequestHeaders(
+    headers,
+    rawUserKey,
+    rawLowCreditKey,
+    activeSecretKey
+  );
   const redactedRequestBodyRaw = requestBodyRaw
-    ? redactSecretString(requestBodyRaw, cfg.apiKey, activeSecretKey)
+    ? redactSecretString(
+        requestBodyRaw,
+        rawUserKey,
+        rawLowCreditKey,
+        activeSecretKey
+      )
     : null;
 
   const startTime = performance.now();
@@ -142,15 +171,22 @@ export async function executeRerouterTest(
 
     const rawResponseBody = redactSecretString(
       rawTextUnredacted,
-      cfg.apiKey,
+      rawUserKey,
+      rawLowCreditKey,
       activeSecretKey
     );
 
     const responseHeaders: Record<string, string> = {};
     response.headers.forEach((value, key) => {
+      const lower = key.toLowerCase();
+      // Never include Authorization or x-api-key in returned response headers
+      if (lower === 'authorization' || lower === 'x-api-key') {
+        return;
+      }
       responseHeaders[key] = redactSecretString(
         value,
-        cfg.apiKey,
+        rawUserKey,
+        rawLowCreditKey,
         activeSecretKey
       );
     });
@@ -238,7 +274,8 @@ export async function executeRerouterTest(
       category: def.category,
       timestamp: new Date().toISOString(),
       authFormatUsed: authFormat,
-      apiKeyConfiguredOnServer: cfg.apiKeyConfigured,
+      userKeySupplied,
+      apiKeyConfiguredOnServer: userKeySupplied,
       method: def.method,
       exactUrl,
       redactedRequestHeaders,
@@ -268,7 +305,8 @@ export async function executeRerouterTest(
     const durationMs = Math.round(performance.now() - startTime);
     const errMessage = redactSecretString(
       err instanceof Error ? `${err.name}: ${err.message}` : String(err),
-      cfg.apiKey,
+      rawUserKey,
+      rawLowCreditKey,
       activeSecretKey
     );
 
@@ -282,7 +320,8 @@ export async function executeRerouterTest(
       category: def.category,
       timestamp: new Date().toISOString(),
       authFormatUsed: authFormat,
-      apiKeyConfiguredOnServer: cfg.apiKeyConfigured,
+      userKeySupplied,
+      apiKeyConfiguredOnServer: userKeySupplied,
       method: def.method,
       exactUrl,
       redactedRequestHeaders,
@@ -318,4 +357,97 @@ export async function executeRerouterTest(
       notes: [...notes, `Network/Timeout error: ${errMessage}`],
     };
   }
+}
+
+/**
+ * Validates a user-supplied ReRouter API key via POST /v1/messages/count_tokens.
+ * Verified behavior:
+ * - Non-billable (estimates input tokens without initiating generation).
+ * - Reliably returns HTTP 200 {"input_tokens": <number>} for valid keys across both Bearer and x-api-key formats.
+ * - Reliably returns HTTP 401 {"error":{"message":"invalid API key","type":"authentication_error"},"type":"error"} for invalid keys.
+ */
+export async function verifyUserApiKeyConnection(
+  userApiKey: string,
+  authFormat: UserAuthFormat
+): Promise<ConnectionVerificationResponse> {
+  const result = await executeRerouterTest({
+    endpointId: 'count-tokens-v1',
+    authFormat,
+    userApiKey,
+    customBodyRaw: JSON.stringify({
+      model: 'claude-haiku-4-5',
+      messages: [
+        {
+          role: 'user',
+          content: 'ReRouter API Playground non-billable connection check.',
+        },
+      ],
+    }),
+  });
+
+  let connectionState: ConnectionState = 'CONNECTION_ERROR';
+  let balanceState: BalanceState = 'BALANCE_UNKNOWN';
+  let shouldRedirectToBilling = false;
+  let message = 'Unable to verify API key connection.';
+  const balanceNote =
+    'UNKNOWN / NOT AVAILABLE — ReRouter does not expose a dedicated balance inquiry endpoint. Balance status is monitored passively via authoritative HTTP 402 responses.';
+
+  if (result.ok && result.httpStatus === 200) {
+    connectionState = 'CONNECTED';
+    balanceState = 'BALANCE_UNKNOWN';
+    message = `Connected and verified via non-billable POST /v1/messages/count_tokens (${result.durationMs} ms).`;
+  } else if (result.httpStatus === 401) {
+    connectionState = 'INVALID_API_KEY';
+    balanceState = 'BALANCE_UNKNOWN';
+    const errText =
+      result.errorAnalysis?.readableMessage ||
+      'Invalid, missing, or revoked API key.';
+    message = `Authentication failed (HTTP 401): ${errText}`;
+  } else if (
+    result.httpStatus === 402 ||
+    result.errorAnalysis?.isAuthoritativeInsufficientBalance
+  ) {
+    connectionState = 'BALANCE_EMPTY';
+    balanceState = 'BALANCE_EMPTY';
+    shouldRedirectToBilling = true;
+    const errText =
+      result.errorAnalysis?.readableMessage ||
+      'Account has no available credit balance or key credit limit reached.';
+    message = `Authoritative insufficient credit balance response (HTTP 402): ${errText}`;
+  } else if (
+    result.httpStatus === 502 ||
+    result.httpStatus === 503 ||
+    result.httpStatus === 504
+  ) {
+    connectionState = 'RE_ROUTER_UNAVAILABLE';
+    balanceState = 'BALANCE_UNKNOWN';
+    message = `ReRouter API is temporarily unavailable (HTTP ${result.httpStatus}). Please retry shortly.`;
+  } else if (result.httpStatus === 0) {
+    connectionState = 'CONNECTION_ERROR';
+    balanceState = 'BALANCE_UNKNOWN';
+    message = `Network error or timeout while contacting ReRouter: ${
+      result.networkError || 'Connection failed'
+    }`;
+  } else {
+    connectionState = 'CONNECTION_ERROR';
+    balanceState = 'BALANCE_UNKNOWN';
+    message = `Unexpected response from validation endpoint (HTTP ${result.httpStatus}): ${
+      result.errorAnalysis?.readableMessage || result.statusText
+    }`;
+  }
+
+  return {
+    ok: connectionState === 'CONNECTED',
+    connectionState,
+    balanceState,
+    authFormatVerified: authFormat,
+    httpStatus: result.httpStatus,
+    durationMs: result.durationMs,
+    endpointTested: result.exactUrl,
+    message,
+    balanceNote,
+    shouldRedirectToBilling,
+    billingUrl: OFFICIAL_BILLING_URL,
+    verificationResult: result,
+  };
 }

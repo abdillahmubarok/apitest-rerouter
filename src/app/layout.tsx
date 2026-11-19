@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
+import { RerouterSessionProvider } from '@/context/RerouterSessionContext';
 import './globals.css';
 
 const geistSans = Geist({
@@ -13,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'ReRouter API Inspector — Live Verification & Testing Console',
+  title: 'ReRouter API Playground — Live Verification & Endpoint Testing',
   description:
-    'Live API verification, model catalog inspection, error schema audit, and endpoint testing console for ReRouter by Mubarokah Digital.',
+    'Public Bring Your Own API Key (BYOK) developer playground, model catalog explorer, SSE stream inspector, and error schema verifier for ReRouter by Mubarokah Digital.',
 };
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {
@@ -25,7 +26,7 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
     >
       <body className="min-h-full flex flex-col bg-slate-950 text-slate-100">
-        {children}
+        <RerouterSessionProvider>{children}</RerouterSessionProvider>
       </body>
     </html>
   );

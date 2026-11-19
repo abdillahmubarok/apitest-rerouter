@@ -1,5 +1,33 @@
 export type AuthFormat = 'bearer' | 'x-api-key' | 'none' | 'invalid-dummy';
 
+export type UserAuthFormat = 'bearer' | 'x-api-key';
+
+export type ConnectionState =
+  | 'NOT_CONNECTED'
+  | 'CONNECTING'
+  | 'CONNECTED'
+  | 'INVALID_API_KEY'
+  | 'CONNECTION_ERROR'
+  | 'RE_ROUTER_UNAVAILABLE'
+  | 'BALANCE_EMPTY'
+  | 'BALANCE_UNKNOWN';
+
+export type BalanceState = 'BALANCE_UNKNOWN' | 'BALANCE_EMPTY';
+
+export type ErrorCategory =
+  | 'none'
+  | 'invalid_api_key'
+  | 'expired_or_revoked_api_key'
+  | 'insufficient_balance'
+  | 'model_not_found'
+  | 'model_access_denied'
+  | 'invalid_request_payload'
+  | 'rate_limit'
+  | 'service_unavailable'
+  | 'upstream_provider_error'
+  | 'network_timeout'
+  | 'unknown_error';
+
 export type TestCategory = 'A' | 'B' | 'C';
 
 export type EndpointId =
@@ -205,6 +233,11 @@ export interface ErrorSchemaAnalysis {
     | 'custom-json'
     | 'plain-text'
     | 'none';
+  errorCategory: ErrorCategory;
+  errorCategoryLabel: string;
+  isAuthFailure401: boolean;
+  isAuthoritativeInsufficientBalance: boolean;
+  isTemporaryUnavailable: boolean;
   readableMessage: string;
   hasErrorObject: boolean;
   hasErrorCode: boolean;
@@ -255,6 +288,7 @@ export interface TestExecutionResult {
   category: TestCategory;
   timestamp: string;
   authFormatUsed: AuthFormat;
+  userKeySupplied: boolean;
   apiKeyConfiguredOnServer: boolean;
   method: 'GET' | 'POST';
   exactUrl: string;
@@ -318,9 +352,28 @@ export interface PrivacyQuestionItem {
 
 export interface ServerConfigStatus {
   baseUrl: string;
+  docsUrl: string;
+  billingUrl: string;
+  productionDomain: string;
+  byokMode: boolean;
   apiKeyConfigured: boolean;
-  keySource: 'env' | 'env.local' | 'missing' | 'placeholder';
+  keySource: 'byok-memory' | 'none';
   maskedStatus: string;
   nextVersion: string;
   timestamp: string;
+}
+
+export interface ConnectionVerificationResponse {
+  ok: boolean;
+  connectionState: ConnectionState;
+  balanceState: BalanceState;
+  authFormatVerified: UserAuthFormat;
+  httpStatus: number;
+  durationMs: number;
+  endpointTested: string;
+  message: string;
+  balanceNote: string;
+  shouldRedirectToBilling: boolean;
+  billingUrl: string;
+  verificationResult?: TestExecutionResult;
 }

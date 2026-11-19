@@ -145,9 +145,14 @@ export function TestResultView({ result }: TestResultViewProps) {
             <div className="text-xs font-bold uppercase tracking-wider text-rose-300">
               Live Error Response Schema Analysis
             </div>
-            <span className="px-2 py-0.5 text-[11px] font-mono rounded bg-rose-900/70 text-rose-200 border border-rose-700">
-              Format: {result.errorAnalysis.detectedFormat}
-            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="px-2 py-0.5 text-[11px] font-mono rounded bg-slate-950 text-amber-300 border border-amber-700/70">
+                Category: {result.errorAnalysis.errorCategoryLabel}
+              </span>
+              <span className="px-2 py-0.5 text-[11px] font-mono rounded bg-rose-900/70 text-rose-200 border border-rose-700">
+                Format: {result.errorAnalysis.detectedFormat}
+              </span>
+            </div>
           </div>
 
           <div className="p-2.5 rounded bg-slate-950/90 border border-rose-900/60">

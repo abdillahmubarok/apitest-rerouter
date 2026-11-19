@@ -1,5 +1,155 @@
 import { getJsonDataType, inspectJsonRecursively } from './inspect-models';
-import type { ErrorSchemaAnalysis } from './types';
+import type { ErrorCategory, ErrorSchemaAnalysis } from './types';
+
+function classifyErrorCategory(
+  httpStatus: number,
+  readableMessage: string,
+  errorTypeValue: unknown,
+  isErrorStatus: boolean
+): {
+  errorCategory: ErrorCategory;
+  errorCategoryLabel: string;
+  isAuthFailure401: boolean;
+  isAuthoritativeInsufficientBalance: boolean;
+  isTemporaryUnavailable: boolean;
+} {
+  if (!isErrorStatus && httpStatus >= 200 && httpStatus < 400) {
+    return {
+      errorCategory: 'none',
+      errorCategoryLabel: 'No Error (2xx Success)',
+      isAuthFailure401: false,
+      isAuthoritativeInsufficientBalance: false,
+      isTemporaryUnavailable: false,
+    };
+  }
+
+  const lowerMsg = readableMessage.toLowerCase();
+  const lowerType =
+    typeof errorTypeValue === 'string' ? errorTypeValue.toLowerCase() : '';
+
+  if (httpStatus === 0) {
+    return {
+      errorCategory: 'network_timeout',
+      errorCategoryLabel: 'Network Timeout / Unreachable',
+      isAuthFailure401: false,
+      isAuthoritativeInsufficientBalance: false,
+      isTemporaryUnavailable: true,
+    };
+  }
+
+  if (httpStatus === 401) {
+    const isRevokedOrExpired =
+      lowerMsg.includes('revoked') ||
+      lowerMsg.includes('expired') ||
+      lowerMsg.includes('cabut') ||
+      lowerType.includes('revoked') ||
+      lowerType.includes('expired');
+
+    if (isRevokedOrExpired) {
+      return {
+        errorCategory: 'expired_or_revoked_api_key',
+        errorCategoryLabel: 'Expired or Revoked API Key (HTTP 401)',
+        isAuthFailure401: true,
+        isAuthoritativeInsufficientBalance: false,
+        isTemporaryUnavailable: false,
+      };
+    }
+
+    return {
+      errorCategory: 'invalid_api_key',
+      errorCategoryLabel: 'Invalid or Missing API Key (HTTP 401)',
+      isAuthFailure401: true,
+      isAuthoritativeInsufficientBalance: false,
+      isTemporaryUnavailable: false,
+    };
+  }
+
+  // Strictly classify HTTP 402 (documented ReRouter insufficient credits status) as insufficient_balance.
+  // Never classify 400, 401, 403, 404, 429, 500, 502, 503, or timeouts as empty balance.
+  if (httpStatus === 402) {
+    return {
+      errorCategory: 'insufficient_balance',
+      errorCategoryLabel:
+        'Insufficient Balance / Credit Limit Reached (HTTP 402)',
+      isAuthFailure401: false,
+      isAuthoritativeInsufficientBalance: true,
+      isTemporaryUnavailable: false,
+    };
+  }
+
+  if (httpStatus === 403) {
+    return {
+      errorCategory: 'model_access_denied',
+      errorCategoryLabel:
+        'Model Access Denied / Restricted by Key Allow-List (HTTP 403)',
+      isAuthFailure401: false,
+      isAuthoritativeInsufficientBalance: false,
+      isTemporaryUnavailable: false,
+    };
+  }
+
+  if (httpStatus === 404) {
+    return {
+      errorCategory: 'model_not_found',
+      errorCategoryLabel: 'Model Not Found (HTTP 404)',
+      isAuthFailure401: false,
+      isAuthoritativeInsufficientBalance: false,
+      isTemporaryUnavailable: false,
+    };
+  }
+
+  if (httpStatus === 400 || httpStatus === 413 || httpStatus === 422) {
+    return {
+      errorCategory: 'invalid_request_payload',
+      errorCategoryLabel:
+        httpStatus === 413
+          ? 'Payload Too Large (>32 MB, HTTP 413)'
+          : 'Invalid Request Payload (HTTP 400)',
+      isAuthFailure401: false,
+      isAuthoritativeInsufficientBalance: false,
+      isTemporaryUnavailable: false,
+    };
+  }
+
+  if (httpStatus === 429) {
+    return {
+      errorCategory: 'rate_limit',
+      errorCategoryLabel: 'Rate Limit Exceeded (HTTP 429)',
+      isAuthFailure401: false,
+      isAuthoritativeInsufficientBalance: false,
+      isTemporaryUnavailable: false,
+    };
+  }
+
+  if (httpStatus === 502) {
+    return {
+      errorCategory: 'upstream_provider_error',
+      errorCategoryLabel:
+        'Upstream Model Provider Unavailable (HTTP 502 Bad Gateway)',
+      isAuthFailure401: false,
+      isAuthoritativeInsufficientBalance: false,
+      isTemporaryUnavailable: true,
+    };
+  }
+
+  if (httpStatus === 503 || httpStatus === 504) {
+    return {
+      errorCategory: 'service_unavailable',
+      errorCategoryLabel: `ReRouter Service Temporarily Unavailable (HTTP ${httpStatus})`,
+      isAuthFailure401: false,
+      isAuthoritativeInsufficientBalance: false,
+      isTemporaryUnavailable: true,
+    };
+  }
+
+  return {
+    errorCategory: 'unknown_error',
+    errorCategoryLabel: `Unexpected Error (HTTP ${httpStatus})`,
+    isAuthFailure401: false,
+    isAuthoritativeInsufficientBalance: false,
+    isTemporaryUnavailable: false,
+  };
+}
 
 export function inspectErrorResponse(
   httpStatus: number,
@@ -26,11 +176,23 @@ export function inspectErrorResponse(
         `HTML Error Response (HTTP ${httpStatus})`;
     }
 
+    const classification = classifyErrorCategory(
+      httpStatus,
+      readableMessage,
+      null,
+      isErrorStatus
+    );
+
     return {
       isErrorStatus,
       httpStatus,
       isJson: false,
-      detectedFormat: isHtml ? 'html-gateway' : isErrorStatus ? 'plain-text' : 'none',
+      detectedFormat: isHtml
+        ? 'html-gateway'
+        : isErrorStatus
+          ? 'plain-text'
+          : 'none',
+      ...classification,
       readableMessage,
       hasErrorObject: false,
       hasErrorCode: false,
@@ -113,6 +275,16 @@ export function inspectErrorResponse(
     readableMessage = root.detail;
   }
 
+  const effectiveIsError =
+    isErrorStatus || hasErrorObject || topLevelTypeValue === 'error';
+
+  const classification = classifyErrorCategory(
+    httpStatus,
+    readableMessage,
+    errorTypeValue,
+    effectiveIsError
+  );
+
   let openAIHypothesisNote = 'Does not match OpenAI error object structure.';
   if (matchesOpenAIHypothesis) {
     if (hasErrorCode) {
@@ -135,10 +307,11 @@ export function inspectErrorResponse(
   }
 
   return {
-    isErrorStatus: isErrorStatus || hasErrorObject || topLevelTypeValue === 'error',
+    isErrorStatus: effectiveIsError,
     httpStatus,
     isJson: true,
     detectedFormat,
+    ...classification,
     readableMessage,
     hasErrorObject,
     hasErrorCode,

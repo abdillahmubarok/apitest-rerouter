@@ -382,7 +382,7 @@ export function CreditTruncationPanel({
           <div>
             <label className="text-xs text-slate-400 block mb-1">
               Optional One-Time Low-Credit Test API Key (Leave blank to use
-              server .env.local key; never stored or logged)
+              active in-memory session key; never stored or logged)
             </label>
             <input
               type="password"

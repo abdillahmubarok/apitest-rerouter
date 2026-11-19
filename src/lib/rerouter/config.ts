@@ -1,8 +1,12 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import type { ServerConfigStatus } from './types';
 
-const DEFAULT_BASE_URL = 'https://rerouter.mubarokah.com/v1';
+export const DEFAULT_BASE_URL = 'https://rerouter.mubarokah.com/v1';
+export const OFFICIAL_DOCS_URL = 'https://rerouter.mubarokah.com/docs';
+export const OFFICIAL_BILLING_URL = 'https://rerouter.mubarokah.com/billing';
+export const PRODUCTION_DOMAIN = 'https://apitest-rerouter.mubarokah.com';
+
+export const USER_KEY_PROXY_HEADER = 'x-rerouter-user-key';
+export const USER_AUTH_FORMAT_HEADER = 'x-rerouter-auth-format';
 
 const PLACEHOLDER_KEYS = new Set([
   '',
@@ -13,43 +17,14 @@ const PLACEHOLDER_KEYS = new Set([
   'sk-your-api-key',
 ]);
 
-interface ParsedEnvLocal {
-  REROUTER_BASE_URL?: string;
-  REROUTER_API_KEY?: string;
-}
-
-function readEnvLocalFromDisk(): ParsedEnvLocal {
-  try {
-    const envPath = path.join(process.cwd(), '.env.local');
-    if (!fs.existsSync(envPath)) {
-      return {};
-    }
-    const content = fs.readFileSync(envPath, 'utf-8');
-    const result: ParsedEnvLocal = {};
-    for (const rawLine of content.split(/\r?\n/)) {
-      const line = rawLine.trim();
-      if (!line || line.startsWith('#')) continue;
-      const eqIdx = line.indexOf('=');
-      if (eqIdx === -1) continue;
-      const key = line.slice(0, eqIdx).trim();
-      let val = line.slice(eqIdx + 1).trim();
-      if (
-        (val.startsWith('"') && val.endsWith('"')) ||
-        (val.startsWith("'") && val.endsWith("'"))
-      ) {
-        val = val.slice(1, -1).trim();
-      }
-      if (key === 'REROUTER_BASE_URL') {
-        result.REROUTER_BASE_URL = val;
-      } else if (key === 'REROUTER_API_KEY') {
-        result.REROUTER_API_KEY = val;
-      }
-    }
-    return result;
-  } catch {
-    return {};
-  }
-}
+export const STANDARD_SECURITY_HEADERS: Record<string, string> = {
+  'Cache-Control':
+    'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+  Pragma: 'no-cache',
+  Expires: '0',
+  'Referrer-Policy': 'no-referrer',
+  'X-Content-Type-Options': 'nosniff',
+};
 
 export function isPlaceholderKey(key: string | undefined | null): boolean {
   if (!key) return true;
@@ -63,18 +38,18 @@ export function isPlaceholderKey(key: string | undefined | null): boolean {
 export interface ServerRerouterConfig {
   baseUrl: string;
   rootOriginUrl: string;
-  apiKey: string | null;
-  apiKeyConfigured: boolean;
-  keySource: 'env' | 'env.local' | 'missing' | 'placeholder';
+  docsUrl: string;
+  billingUrl: string;
+  productionDomain: string;
 }
 
+/**
+ * Returns non-secret server configuration only.
+ * Any server-side API key environment variable is intentionally ignored
+ * to enforce strict per-request Bring Your Own API Key (BYOK) isolation.
+ */
 export function getServerRerouterConfig(): ServerRerouterConfig {
-  const diskEnv = readEnvLocalFromDisk();
-
-  const rawBaseUrl =
-    diskEnv.REROUTER_BASE_URL ||
-    process.env.REROUTER_BASE_URL ||
-    DEFAULT_BASE_URL;
+  const rawBaseUrl = process.env.REROUTER_BASE_URL || DEFAULT_BASE_URL;
   const baseUrl = rawBaseUrl.replace(/\/+$/, '');
 
   let rootOriginUrl = 'https://rerouter.mubarokah.com';
@@ -85,65 +60,76 @@ export function getServerRerouterConfig(): ServerRerouterConfig {
     rootOriginUrl = baseUrl.replace(/\/v1$/, '');
   }
 
-  const diskKey = diskEnv.REROUTER_API_KEY;
-  const procKey = process.env.REROUTER_API_KEY;
-
-  let rawKey: string | undefined;
-  let source: 'env' | 'env.local' | 'missing' | 'placeholder' = 'missing';
-
-  if (diskKey && !isPlaceholderKey(diskKey)) {
-    rawKey = diskKey.trim();
-    source = 'env.local';
-  } else if (procKey && !isPlaceholderKey(procKey)) {
-    rawKey = procKey.trim();
-    source = 'env';
-  } else if (diskKey || procKey) {
-    source = 'placeholder';
-  }
-
   return {
     baseUrl,
     rootOriginUrl,
-    apiKey: rawKey ?? null,
-    apiKeyConfigured: Boolean(rawKey),
-    keySource: source,
+    docsUrl: OFFICIAL_DOCS_URL,
+    billingUrl: OFFICIAL_BILLING_URL,
+    productionDomain: PRODUCTION_DOMAIN,
   };
 }
 
-export function getPublicConfigStatus(): ServerConfigStatus {
+export function getPublicConfigStatus(
+  userKeySupplied = false
+): ServerConfigStatus {
   const cfg = getServerRerouterConfig();
-  let maskedStatus = 'Not Configured (Missing REROUTER_API_KEY in .env.local)';
-  if (cfg.apiKeyConfigured) {
-    maskedStatus = 'Configured in server environment (secret value hidden)';
-  } else if (cfg.keySource === 'placeholder') {
-    maskedStatus = 'Placeholder detected (Replace YOUR_API_KEY in .env.local)';
-  }
 
   return {
     baseUrl: cfg.baseUrl,
-    apiKeyConfigured: cfg.apiKeyConfigured,
-    keySource: cfg.keySource,
-    maskedStatus,
+    docsUrl: cfg.docsUrl,
+    billingUrl: cfg.billingUrl,
+    productionDomain: cfg.productionDomain,
+    byokMode: true,
+    apiKeyConfigured: userKeySupplied,
+    keySource: userKeySupplied ? 'byok-memory' : 'none',
+    maskedStatus: userKeySupplied
+      ? 'Connected via per-request BYOK in-memory session (not stored on server)'
+      : 'No active in-memory API key supplied with request (BYOK mode)',
     nextVersion: '16.4.6',
     timestamp: new Date().toISOString(),
   };
 }
 
+/**
+ * Extracts the per-request user-supplied API key from incoming request headers.
+ * Never accepts API keys from URL search parameters or server environment variables.
+ */
+export function extractUserApiKeyFromHeaders(headers: Headers): string | null {
+  const proxyHeaderKey = headers.get(USER_KEY_PROXY_HEADER);
+  if (proxyHeaderKey && !isPlaceholderKey(proxyHeaderKey)) {
+    return proxyHeaderKey.trim();
+  }
+
+  const xApiKey = headers.get('x-api-key');
+  if (xApiKey && !isPlaceholderKey(xApiKey)) {
+    return xApiKey.trim();
+  }
+
+  const authHeader = headers.get('authorization');
+  if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+    const token = authHeader.slice(7).trim();
+    if (token && !isPlaceholderKey(token)) {
+      return token;
+    }
+  }
+
+  return null;
+}
+
 export function redactSecretString(
   input: string,
-  secretKey?: string | null,
-  extraSecret?: string | null
+  ...secrets: Array<string | null | undefined>
 ): string {
   if (!input) return input;
   let output = input;
-  const cfg = getServerRerouterConfig();
-  const secretsToRedact = [cfg.apiKey, secretKey, extraSecret].filter(
-    (s): s is string => Boolean(s && s.trim().length > 3)
+  const secretsToRedact = secrets.filter((s): s is string =>
+    Boolean(s && s.trim().length > 3)
   );
 
   for (const secret of secretsToRedact) {
-    if (output.includes(secret)) {
-      output = output.split(secret).join('[REDACTED_API_KEY]');
+    const trimmed = secret.trim();
+    if (output.includes(trimmed)) {
+      output = output.split(trimmed).join('[REDACTED_API_KEY]');
     }
   }
   return output;
@@ -151,7 +137,7 @@ export function redactSecretString(
 
 export function redactRequestHeaders(
   headers: Record<string, string>,
-  secretKey?: string | null
+  ...secrets: Array<string | null | undefined>
 ): Record<string, string> {
   const redacted: Record<string, string> = {};
   for (const [k, v] of Object.entries(headers)) {
@@ -170,6 +156,7 @@ export function redactRequestHeaders(
     } else if (
       lower === 'x-api-key' ||
       lower === 'api-key' ||
+      lower === USER_KEY_PROXY_HEADER ||
       lower.includes('secret') ||
       lower.includes('token')
     ) {
@@ -179,7 +166,7 @@ export function redactRequestHeaders(
         redacted[k] = '[REDACTED_API_KEY]';
       }
     } else {
-      redacted[k] = redactSecretString(v, secretKey);
+      redacted[k] = redactSecretString(v, ...secrets);
     }
   }
   return redacted;

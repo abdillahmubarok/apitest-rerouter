@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CreditTruncationPanel } from './CreditTruncationPanel';
 import { OverviewPanel } from './OverviewPanel';
+import { BillingRedirectModal } from '@/components/connection/BillingRedirectModal';
+import { ConnectionModal } from '@/components/connection/ConnectionModal';
 import { EndpointTestPanel } from '@/components/endpoint-tester/EndpointTestPanel';
 import { ErrorInspectorPanel } from '@/components/error-inspector/ErrorInspectorPanel';
 import { ModelCatalogPanel } from '@/components/model-catalog/ModelCatalogPanel';
@@ -10,6 +12,11 @@ import { ModelChangesPanel } from '@/components/model-catalog/ModelChangesPanel'
 import { RateLimitPanel } from '@/components/rate-limit-inspector/RateLimitPanel';
 import { PrivacyPanel } from '@/components/report-viewer/PrivacyPanel';
 import { TestReportsPanel } from '@/components/report-viewer/TestReportsPanel';
+import {
+  OFFICIAL_BILLING_URL,
+  OFFICIAL_DOCS_URL,
+  useRerouterSession,
+} from '@/context/RerouterSessionContext';
 import {
   DEFAULT_PRIVACY_QUESTIONS,
   generateTestReportMarkdown,
@@ -129,7 +136,7 @@ const SIDEBAR_ITEMS: SidebarNavItem[] = [
     id: 'privacy',
     number: 15,
     label: 'Privacy',
-    badge: '15 Qs',
+    badge: 'BYOK & 15 Qs',
     category: 'Info',
   },
   {
@@ -141,7 +148,35 @@ const SIDEBAR_ITEMS: SidebarNavItem[] = [
   },
 ];
 
+interface ExecuteTestParams {
+  endpointId: EndpointId;
+  authFormat?: AuthFormat;
+  customBodyRaw?: string;
+  selectedModelId?: string;
+  dedicatedLowCreditKey?: string;
+  confirmLowCreditTest?: boolean;
+}
+
 export function RerouterInspectorConsole() {
+  const { sessionEpoch } = useRerouterSession();
+  // Keying by sessionEpoch automatically clears all in-memory test state on Disconnect
+  return <RerouterInspectorWorkspace key={sessionEpoch} />;
+}
+
+function RerouterInspectorWorkspace() {
+  const {
+    isConnected,
+    authFormat: sessionAuthFormat,
+    balanceState,
+    lastVerificationResult,
+    sessionEpoch,
+    setAuthFormat: setSessionAuthFormat,
+    disconnect,
+    handleUnauthorized401,
+    handleAuthoritativeInsufficientBalance,
+    buildProxyAuthHeaders,
+  } = useRerouterSession();
+
   const [activeSection, setActiveSection] =
     useState<SidebarSectionId>('overview');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -149,8 +184,8 @@ export function RerouterInspectorConsole() {
   const [configStatus, setConfigStatus] = useState<ServerConfigStatus | null>(
     null
   );
-  const [activeAuthFormat, setActiveAuthFormat] =
-    useState<AuthFormat>('bearer');
+  const activeAuthFormat: AuthFormat = sessionAuthFormat;
+
   const [catalogAnalysis, setCatalogAnalysis] =
     useState<CatalogAnalysis | null>(null);
   const [rawCatalogObject, setRawCatalogObject] = useState<unknown | null>(
@@ -161,26 +196,132 @@ export function RerouterInspectorConsole() {
   const [testResults, setTestResults] = useState<TestExecutionResult[]>([]);
   const [snapshots, setSnapshots] = useState<CatalogSnapshot[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [lastRetryParams, setLastRetryParams] =
+    useState<ExecuteTestParams | null>(null);
   const [notification, setNotification] = useState<{
-    type: 'info' | 'error' | 'success';
+    type: 'info' | 'error' | 'success' | 'warning';
     message: string;
+    allowManualRetry?: boolean;
   } | null>(null);
 
+  const initializedRef = useRef<boolean>(false);
+
+  const handleAuthFormatChange = useCallback(
+    (fmt: AuthFormat) => {
+      if (fmt === 'bearer' || fmt === 'x-api-key') {
+        setSessionAuthFormat(fmt);
+      }
+    },
+    [setSessionAuthFormat]
+  );
+
   const appendResult = useCallback((result: TestExecutionResult) => {
-    setTestResults((prev) => [result, ...prev]);
+    setTestResults((prev) => {
+      if (prev.some((existing) => existing.id === result.id)) {
+        return prev;
+      }
+      return [result, ...prev];
+    });
   }, []);
 
+  const inspectResultForSessionEvents = useCallback(
+    (
+      result: TestExecutionResult,
+      retryParams?: ExecuteTestParams
+    ): boolean => {
+      // 1. Authoritative insufficient credit balance check (HTTP 402)
+      if (
+        result.httpStatus === 402 ||
+        result.errorAnalysis?.isAuthoritativeInsufficientBalance
+      ) {
+        handleAuthoritativeInsufficientBalance(
+          result.httpStatus || 402,
+          result.exactUrl,
+          result.errorAnalysis?.readableMessage ||
+            'Account has no available credit balance or key credit limit reached.'
+        );
+        return true;
+      }
+
+      // 2. Authentication failure (HTTP 401) on a request that used the visitor's active key
+      const usedUserKey =
+        result.authFormatUsed === 'bearer' ||
+        result.authFormatUsed === 'x-api-key';
+      if (
+        result.httpStatus === 401 &&
+        usedUserKey &&
+        !result.endpointId.startsWith('error-')
+      ) {
+        handleUnauthorized401(
+          result.label,
+          result.errorAnalysis?.readableMessage ||
+            'Invalid, expired, or revoked API key.'
+        );
+        return true;
+      }
+
+      // 3. Rate Limit (HTTP 429) — respect Retry-After and do not auto-retry
+      if (result.httpStatus === 429) {
+        const retryHint = result.rateLimitInspection.retryAfterExists
+          ? ` Retry-After: ${result.rateLimitInspection.retryAfterValue} (${result.rateLimitInspection.retryAfterFormat}).`
+          : '';
+        setNotification({
+          type: 'warning',
+          message: `Rate limit reached (HTTP 429) on ${result.label}.${retryHint} Billable requests are never automatically repeated.`,
+        });
+        return true;
+      }
+
+      // 4. Temporary service/provider unavailability (502, 503, 504) — offer manual retry
+      if (
+        result.httpStatus === 502 ||
+        result.httpStatus === 503 ||
+        result.httpStatus === 504
+      ) {
+        if (retryParams) {
+          setLastRetryParams(retryParams);
+        }
+        setNotification({
+          type: 'warning',
+          allowManualRetry: Boolean(retryParams),
+          message: `${
+            result.errorAnalysis?.errorCategoryLabel ||
+            `Service temporarily unavailable (HTTP ${result.httpStatus})`
+          }: ${
+            result.errorAnalysis?.readableMessage ||
+            'Upstream provider or gateway is temporarily unavailable.'
+          }`,
+        });
+        return true;
+      }
+
+      return false;
+    },
+    [handleAuthoritativeInsufficientBalance, handleUnauthorized401]
+  );
+
   const fetchModelsCatalog = useCallback(
-    async (authFormat: AuthFormat = activeAuthFormat) => {
+    async (
+      authFormat: AuthFormat = activeAuthFormat,
+      initialVerificationToPrepend?: TestExecutionResult | null
+    ) => {
       setIsLoading(true);
       try {
         const res = await fetch(
           `/api/rerouter/models?authFormat=${encodeURIComponent(authFormat)}`,
-          { cache: 'no-store' }
+          {
+            headers: buildProxyAuthHeaders(
+              authFormat === 'x-api-key' ? 'x-api-key' : 'bearer'
+            ),
+            cache: 'no-store',
+          }
         );
         const data = await res.json();
         if (data.configStatus) {
           setConfigStatus(data.configStatus);
+        }
+        if (initialVerificationToPrepend) {
+          appendResult(initialVerificationToPrepend);
         }
         if (data.testResult) {
           setModelsTestResult(data.testResult);
@@ -221,37 +362,50 @@ export function RerouterInspectorConsole() {
         setIsLoading(false);
       }
     },
-    [activeAuthFormat, appendResult]
+    [activeAuthFormat, appendResult, buildProxyAuthHeaders]
   );
 
-  // Automatically request GET /v1/models on load (Section 3.B & TEST 1)
+  // Upon successful connection, load GET /v1/models and include verification telemetry
   useEffect(() => {
-    void fetchModelsCatalog('bearer');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (isConnected && !initializedRef.current) {
+      initializedRef.current = true;
+      void fetchModelsCatalog(sessionAuthFormat, lastVerificationResult);
+    }
+  }, [
+    isConnected,
+    sessionAuthFormat,
+    lastVerificationResult,
+    fetchModelsCatalog,
+  ]);
 
   const executeEndpointTest = useCallback(
-    async (params: {
-      endpointId: EndpointId;
-      authFormat?: AuthFormat;
-      customBodyRaw?: string;
-      selectedModelId?: string;
-      dedicatedLowCreditKey?: string;
-      confirmLowCreditTest?: boolean;
-    }): Promise<TestExecutionResult | null> => {
+    async (params: ExecuteTestParams): Promise<TestExecutionResult | null> => {
       setIsLoading(true);
+      setLastRetryParams(null);
       try {
+        const effectiveAuth = params.authFormat ?? activeAuthFormat;
+        const proxyHeaders: Record<string, string> = {
+          'Content-Type': 'application/json',
+          ...buildProxyAuthHeaders(
+            effectiveAuth === 'x-api-key' ? 'x-api-key' : 'bearer'
+          ),
+        };
+        if (params.dedicatedLowCreditKey) {
+          proxyHeaders['x-rerouter-low-credit-key'] =
+            params.dedicatedLowCreditKey;
+        }
+
         const res = await fetch('/api/rerouter/test', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: proxyHeaders,
           body: JSON.stringify({
             endpointId: params.endpointId,
-            authFormat: params.authFormat ?? activeAuthFormat,
+            authFormat: effectiveAuth,
             customBodyRaw: params.customBodyRaw,
             selectedModelId: params.selectedModelId,
-            dedicatedLowCreditKey: params.dedicatedLowCreditKey,
             confirmLowCreditTest: params.confirmLowCreditTest,
           }),
+          cache: 'no-store',
         });
         const data = await res.json();
         if (data.configStatus) {
@@ -260,10 +414,15 @@ export function RerouterInspectorConsole() {
         if (data.testResult) {
           const result: TestExecutionResult = data.testResult;
           appendResult(result);
-          setNotification({
-            type: result.ok ? 'success' : 'info',
-            message: `${result.label} → HTTP ${result.httpStatus} (${result.durationMs} ms)`,
-          });
+
+          const handledSpecial = inspectResultForSessionEvents(result, params);
+
+          if (!handledSpecial) {
+            setNotification({
+              type: result.ok ? 'success' : 'info',
+              message: `${result.label} → HTTP ${result.httpStatus} (${result.durationMs} ms)`,
+            });
+          }
           return result;
         }
         if (data.error) {
@@ -286,7 +445,12 @@ export function RerouterInspectorConsole() {
         setIsLoading(false);
       }
     },
-    [activeAuthFormat, appendResult]
+    [
+      activeAuthFormat,
+      appendResult,
+      buildProxyAuthHeaders,
+      inspectResultForSessionEvents,
+    ]
   );
 
   const handleRunSafeSuite = async () => {
@@ -357,9 +521,15 @@ export function RerouterInspectorConsole() {
   const handleQuickDownloadReport = () => {
     const effectiveConfig: ServerConfigStatus = configStatus ?? {
       baseUrl: 'https://rerouter.mubarokah.com/v1',
-      apiKeyConfigured: false,
-      keySource: 'missing',
-      maskedStatus: 'Not Configured',
+      docsUrl: OFFICIAL_DOCS_URL,
+      billingUrl: OFFICIAL_BILLING_URL,
+      productionDomain: 'https://apitest-rerouter.mubarokah.com',
+      byokMode: true,
+      apiKeyConfigured: isConnected,
+      keySource: isConnected ? 'byok-memory' : 'none',
+      maskedStatus: isConnected
+        ? 'Connected via per-request BYOK in-memory session'
+        : 'Not connected',
       nextVersion: '16.4.6',
       timestamp: new Date().toISOString(),
     };
@@ -374,13 +544,21 @@ export function RerouterInspectorConsole() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'REROUTER_TEST_REPORT.md';
+    a.download = 'REROUTER_SESSION_TEST_REPORT.md';
     a.click();
     URL.revokeObjectURL(url);
   };
 
+  const endpointPanelKeyPrefix = `${catalogAnalysis?.fetchedAt ?? 'init'}-${activeAuthFormat}`;
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+      {/* BYOK Connection Modal (Shown immediately when not connected) */}
+      <ConnectionModal key={`modal-${sessionEpoch}`} />
+
+      {/* Authoritative HTTP 402 Insufficient Credit Redirect Modal */}
+      <BillingRedirectModal />
+
       {/* Top Application Header */}
       <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/95 backdrop-blur px-4 py-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -398,14 +576,14 @@ export function RerouterInspectorConsole() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-sm md:text-base font-bold tracking-tight text-white">
-                  ReRouter API Inspector
+                  ReRouter API Playground
                 </h1>
                 <span className="hidden sm:inline-block px-2 py-0.5 text-[10px] font-mono rounded bg-slate-900 text-sky-400 border border-slate-800">
-                  Next.js 16.4.6
+                  BYOK · Next.js 16.4.6
                 </span>
               </div>
               <p className="text-[11px] font-mono text-slate-400">
-                Target:{' '}
+                Upstream:{' '}
                 <span className="text-slate-300">
                   {configStatus?.baseUrl ??
                     'https://rerouter.mubarokah.com/v1'}
@@ -416,37 +594,93 @@ export function RerouterInspectorConsole() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Live Key Configuration Status Pill */}
+          {/* Persistent Connection Status Indicator */}
           <div
             className={`px-2.5 py-1 rounded-full text-xs font-mono border flex items-center gap-1.5 ${
-              configStatus?.apiKeyConfigured
+              isConnected
                 ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700'
                 : 'bg-amber-950/80 text-amber-300 border-amber-700'
             }`}
           >
             <span
               className={`h-2 w-2 rounded-full ${
-                configStatus?.apiKeyConfigured
-                  ? 'bg-emerald-400'
-                  : 'bg-amber-400'
+                isConnected ? 'bg-emerald-400' : 'bg-amber-400'
               }`}
             />
+            <span>{isConnected ? 'Connected' : 'Not Connected'}</span>
+          </div>
+
+          {/* Active Authentication Format Indicator */}
+          {isConnected && (
+            <div className="px-2.5 py-1 rounded-full text-xs font-mono bg-slate-900 text-indigo-300 border border-slate-800">
+              Auth:{' '}
+              <strong>
+                {activeAuthFormat === 'x-api-key' ? 'x-api-key' : 'Bearer'}
+              </strong>
+            </div>
+          )}
+
+          {/* Balance Verification Status Indicator */}
+          <div
+            title="ReRouter does not expose a balance inquiry endpoint; balance is monitored passively for authoritative HTTP 402 responses."
+            className={`hidden md:flex px-2.5 py-1 rounded-full text-xs font-mono border items-center gap-1.5 ${
+              balanceState === 'BALANCE_EMPTY'
+                ? 'bg-rose-950/80 text-rose-300 border-rose-700'
+                : 'bg-slate-900 text-slate-300 border border-slate-800'
+            }`}
+          >
             <span>
-              API Key: {configStatus?.apiKeyConfigured ? 'Configured' : 'Missing'}
+              Balance:{' '}
+              <strong>
+                {balanceState === 'BALANCE_EMPTY'
+                  ? 'Empty (HTTP 402)'
+                  : 'Unknown'}
+              </strong>
             </span>
           </div>
 
           <div className="px-2.5 py-1 rounded-full text-xs font-mono bg-slate-900 text-slate-300 border border-slate-800">
-            Tests Run: <strong>{testResults.length}</strong>
+            Session Requests: <strong>{testResults.length}</strong>
           </div>
+
+          {/* Official Documentation Link */}
+          <a
+            href={OFFICIAL_DOCS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-900 hover:bg-slate-800 text-sky-400 border border-slate-800 transition-colors"
+          >
+            Docs ↗
+          </a>
+
+          {/* Official Billing Link */}
+          <a
+            href={OFFICIAL_BILLING_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-slate-800 transition-colors"
+          >
+            Billing ↗
+          </a>
 
           <button
             type="button"
             onClick={handleQuickDownloadReport}
             className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
           >
-            ⬇ Download Test Report
+            ⬇ Session Report
           </button>
+
+          {/* Disconnect Action */}
+          {isConnected && (
+            <button
+              type="button"
+              onClick={() => disconnect()}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-950/90 hover:bg-rose-900 text-rose-200 border border-rose-800 transition-colors"
+            >
+              Disconnect
+            </button>
+          )}
         </div>
       </header>
 
@@ -456,57 +690,97 @@ export function RerouterInspectorConsole() {
         <aside
           className={`${
             mobileMenuOpen ? 'block' : 'hidden'
-          } lg:block w-64 shrink-0 border-r border-slate-800 bg-slate-950/90 overflow-y-auto p-3 space-y-1`}
+          } lg:block w-64 shrink-0 border-r border-slate-800 bg-slate-950/90 overflow-y-auto p-3 flex flex-col justify-between gap-4`}
         >
-          <div className="px-2.5 py-1.5 text-[10px] font-mono uppercase tracking-wider text-slate-500">
-            Verification Sections (16)
+          <div className="space-y-1">
+            <div className="px-2.5 py-1.5 text-[10px] font-mono uppercase tracking-wider text-slate-500">
+              Playground Sections (16)
+            </div>
+            {SIDEBAR_ITEMS.map((item) => {
+              const isActive = activeSection === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    setActiveSection(item.id);
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${
+                    isActive
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                  }`}
+                >
+                  <span className="flex items-center gap-2 truncate">
+                    <span
+                      className={`font-mono text-[11px] ${
+                        isActive ? 'text-indigo-200' : 'text-slate-500'
+                      }`}
+                    >
+                      {String(item.number).padStart(2, '0')}.
+                    </span>
+                    <span className="truncate">{item.label}</span>
+                  </span>
+                  {item.badge && (
+                    <span
+                      className={`px-1.5 py-0.5 text-[10px] font-mono rounded shrink-0 ${
+                        isActive
+                          ? 'bg-indigo-700 text-indigo-100'
+                          : item.category === 'A'
+                            ? 'bg-teal-950 text-teal-300 border border-teal-800/60'
+                            : item.category === 'B'
+                              ? 'bg-amber-950 text-amber-300 border border-amber-800/60'
+                              : item.category === 'C'
+                                ? 'bg-purple-950 text-purple-300 border border-purple-800/60'
+                                : 'bg-slate-900 text-slate-400 border border-slate-800'
+                      }`}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
-          {SIDEBAR_ITEMS.map((item) => {
-            const isActive = activeSection === item.id;
-            return (
+
+          {/* Official ReRouter External Resources & Session Box */}
+          <div className="pt-3 border-t border-slate-800/80 space-y-1.5">
+            <div className="px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider text-slate-500">
+              Official ReRouter Links
+            </div>
+            <a
+              href={OFFICIAL_DOCS_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-sky-400 hover:bg-slate-900 transition-colors"
+            >
+              <span>📖 Documentation</span>
+              <span className="font-mono text-[10px] text-slate-500">
+                /docs ↗
+              </span>
+            </a>
+            <a
+              href={OFFICIAL_BILLING_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-emerald-400 hover:bg-slate-900 transition-colors"
+            >
+              <span>💳 Billing & Credits</span>
+              <span className="font-mono text-[10px] text-slate-500">
+                /billing ↗
+              </span>
+            </a>
+            {isConnected && (
               <button
-                key={item.id}
                 type="button"
-                onClick={() => {
-                  setActiveSection(item.id);
-                  setMobileMenuOpen(false);
-                }}
-                className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${
-                  isActive
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-300 hover:bg-slate-900 hover:text-white'
-                }`}
+                onClick={() => disconnect()}
+                className="w-full mt-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-rose-950/60 hover:bg-rose-900/80 text-rose-200 border border-rose-800/70 transition-colors"
               >
-                <span className="flex items-center gap-2 truncate">
-                  <span
-                    className={`font-mono text-[11px] ${
-                      isActive ? 'text-indigo-200' : 'text-slate-500'
-                    }`}
-                  >
-                    {String(item.number).padStart(2, '0')}.
-                  </span>
-                  <span className="truncate">{item.label}</span>
-                </span>
-                {item.badge && (
-                  <span
-                    className={`px-1.5 py-0.5 text-[10px] font-mono rounded shrink-0 ${
-                      isActive
-                        ? 'bg-indigo-700 text-indigo-100'
-                        : item.category === 'A'
-                          ? 'bg-teal-950 text-teal-300 border border-teal-800/60'
-                          : item.category === 'B'
-                            ? 'bg-amber-950 text-amber-300 border border-amber-800/60'
-                            : item.category === 'C'
-                              ? 'bg-purple-950 text-purple-300 border border-purple-800/60'
-                              : 'bg-slate-900 text-slate-400 border border-slate-800'
-                    }`}
-                  >
-                    {item.badge}
-                  </span>
-                )}
+                <span>⏻ Disconnect API Key</span>
               </button>
-            );
-          })}
+            )}
+          </div>
         </aside>
 
         {/* Main Viewport */}
@@ -514,12 +788,14 @@ export function RerouterInspectorConsole() {
           {/* Status / Error Notification Toast */}
           {notification && (
             <div
-              className={`rounded-lg px-4 py-2.5 text-xs font-mono flex items-center justify-between gap-3 border ${
+              className={`rounded-lg px-4 py-2.5 text-xs font-mono flex flex-wrap items-center justify-between gap-3 border ${
                 notification.type === 'error'
                   ? 'bg-rose-950/70 text-rose-200 border-rose-800'
-                  : notification.type === 'success'
-                    ? 'bg-emerald-950/60 text-emerald-200 border-emerald-800'
-                    : 'bg-slate-900 text-slate-200 border-slate-800'
+                  : notification.type === 'warning'
+                    ? 'bg-amber-950/70 text-amber-200 border-amber-700'
+                    : notification.type === 'success'
+                      ? 'bg-emerald-950/60 text-emerald-200 border-emerald-800'
+                      : 'bg-slate-900 text-slate-200 border-slate-800'
               }`}
             >
               <div className="flex items-center gap-2">
@@ -528,13 +804,25 @@ export function RerouterInspectorConsole() {
                 )}
                 <span>{notification.message}</span>
               </div>
-              <button
-                type="button"
-                onClick={() => setNotification(null)}
-                className="text-slate-400 hover:text-white"
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-2">
+                {notification.allowManualRetry && lastRetryParams && (
+                  <button
+                    type="button"
+                    disabled={isLoading}
+                    onClick={() => void executeEndpointTest(lastRetryParams)}
+                    className="px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-500 text-slate-950 font-sans font-semibold text-xs"
+                  >
+                    ↻ Retry Request
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setNotification(null)}
+                  className="text-slate-400 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
           )}
 
@@ -545,7 +833,7 @@ export function RerouterInspectorConsole() {
               catalogAnalysis={catalogAnalysis}
               testResults={testResults}
               activeAuthFormat={activeAuthFormat}
-              onChangeAuthFormat={setActiveAuthFormat}
+              onChangeAuthFormat={handleAuthFormatChange}
               onRunSafeSuite={handleRunSafeSuite}
               onRefreshModels={() => fetchModelsCatalog(activeAuthFormat)}
               onNavigateSection={setActiveSection}
@@ -583,6 +871,7 @@ export function RerouterInspectorConsole() {
           {/* Section 3: Chat Completions (TEST 2) */}
           {activeSection === 'chat-completions' && (
             <EndpointTestPanel
+              key={`chat-completions-${endpointPanelKeyPrefix}`}
               primaryEndpointId="chat-completions"
               catalogAnalysis={catalogAnalysis}
               testResults={testResults}
@@ -597,6 +886,7 @@ export function RerouterInspectorConsole() {
           {/* Section 4: Streaming Chat Completions (TEST 3) */}
           {activeSection === 'streaming' && (
             <EndpointTestPanel
+              key={`chat-completions-stream-${endpointPanelKeyPrefix}`}
               primaryEndpointId="chat-completions-stream"
               catalogAnalysis={catalogAnalysis}
               testResults={testResults}
@@ -611,6 +901,7 @@ export function RerouterInspectorConsole() {
           {/* Section 5: Responses API (TEST 4: Non-Streaming + Streaming) */}
           {activeSection === 'responses' && (
             <EndpointTestPanel
+              key={`responses-${endpointPanelKeyPrefix}`}
               primaryEndpointId="responses"
               secondaryEndpointId="responses-stream"
               catalogAnalysis={catalogAnalysis}
@@ -626,6 +917,7 @@ export function RerouterInspectorConsole() {
           {/* Section 6: Anthropic Messages (TEST 5) */}
           {activeSection === 'anthropic-messages' && (
             <EndpointTestPanel
+              key={`anthropic-messages-${endpointPanelKeyPrefix}`}
               primaryEndpointId="anthropic-messages"
               catalogAnalysis={catalogAnalysis}
               testResults={testResults}
@@ -640,6 +932,7 @@ export function RerouterInspectorConsole() {
           {/* Section 7: Anthropic Count Tokens (TEST 6: Both Candidates) */}
           {activeSection === 'count-tokens' && (
             <EndpointTestPanel
+              key={`count-tokens-${endpointPanelKeyPrefix}`}
               primaryEndpointId="count-tokens-v1"
               secondaryEndpointId="count-tokens-root"
               catalogAnalysis={catalogAnalysis}
@@ -655,6 +948,7 @@ export function RerouterInspectorConsole() {
           {/* Section 8: Embeddings (TEST 7) */}
           {activeSection === 'embeddings' && (
             <EndpointTestPanel
+              key={`embeddings-${endpointPanelKeyPrefix}`}
               primaryEndpointId="embeddings"
               catalogAnalysis={catalogAnalysis}
               testResults={testResults}
@@ -669,6 +963,7 @@ export function RerouterInspectorConsole() {
           {/* Section 9: Decisions API (TEST 8) */}
           {activeSection === 'decisions' && (
             <EndpointTestPanel
+              key={`decisions-${endpointPanelKeyPrefix}`}
               primaryEndpointId="decisions"
               catalogAnalysis={catalogAnalysis}
               testResults={testResults}
@@ -683,6 +978,7 @@ export function RerouterInspectorConsole() {
           {/* Section 10: System One API (TEST 9) */}
           {activeSection === 'systemone' && (
             <EndpointTestPanel
+              key={`systemone-${endpointPanelKeyPrefix}`}
               primaryEndpointId="systemone"
               catalogAnalysis={catalogAnalysis}
               testResults={testResults}

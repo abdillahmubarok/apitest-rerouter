@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { TestResultView } from './TestResultView';
 import { ENDPOINT_DEFINITIONS } from '@/lib/rerouter/endpoints';
 import type {
@@ -106,22 +106,6 @@ export function EndpointTestPanel({
   const [systemOneSubstitutionNote, setSystemOneSubstitutionNote] = useState<
     string | null
   >(null);
-
-  useEffect(() => {
-    setSelectedModelId(initialModelId);
-    setAuthFormat(
-      def.defaultAuthFormat === 'x-api-key' ? 'x-api-key' : defaultAuthFormat
-    );
-    const payload = def.defaultBodyBuilder(initialModelId);
-    setCustomBodyRaw(payload ? JSON.stringify(payload, null, 2) : '');
-    if (secondaryDef) {
-      const secPayload = secondaryDef.defaultBodyBuilder(initialModelId);
-      setSecondaryBodyRaw(
-        secPayload ? JSON.stringify(secPayload, null, 2) : ''
-      );
-    }
-    setSystemOneSubstitutionNote(null);
-  }, [primaryEndpointId, secondaryDef, def, initialModelId, defaultAuthFormat]);
 
   const handleModelChange = (newModelId: string, note?: string) => {
     setSelectedModelId(newModelId);

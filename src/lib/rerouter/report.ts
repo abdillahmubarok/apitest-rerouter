@@ -198,24 +198,28 @@ export function generateTestReportMarkdown(
     privacyQuestions = DEFAULT_PRIVACY_QUESTIONS,
   } = input;
 
-  const reportTime = configStatus.timestamp || '2026-11-19';
+  const reportTime = configStatus.timestamp || new Date().toISOString();
   const lines: string[] = [
-    '# ReRouter Live API Verification & Testing Report',
+    '# ReRouter API Playground — Live BYOK Session Verification Report',
     '',
-    '## A. Environment',
+    '> **Session Report Notice:** This report is generated dynamically from your active in-memory browser session in the public ReRouter API Playground (`https://apitest-rerouter.mubarokah.com`). It reflects only the requests executed during your current session using your own Bring Your Own API Key (BYOK) and is completely distinct from historical project verification documentation. All API keys and authentication headers are redacted.',
     '',
+    '## A. Environment & Session Architecture',
+    '',
+    `- **Platform:** \`ReRouter API Playground (Public Multi-User BYOK)\``,
+    `- **Production Domain:** \`${configStatus.productionDomain || 'https://apitest-rerouter.mubarokah.com'}\``,
     `- **Next.js Version:** \`${configStatus.nextVersion}\` (App Router)`,
-    `- **Base URL:** \`${configStatus.baseUrl}\``,
-    `- **Default Authentication Method:** \`${
+    `- **Target ReRouter Base URL:** \`${configStatus.baseUrl}\``,
+    `- **Official Documentation:** \`${configStatus.docsUrl || 'https://rerouter.mubarokah.com/docs'}\``,
+    `- **Official Billing Portal:** \`${configStatus.billingUrl || 'https://rerouter.mubarokah.com/billing'}\``,
+    `- **Active Authentication Format:** \`${
       activeAuthFormat === 'x-api-key'
-        ? 'x-api-key: [REDACTED]'
-        : 'Authorization: Bearer [REDACTED]'
+        ? 'x-api-key: [REDACTED_API_KEY]'
+        : 'Authorization: Bearer [REDACTED_API_KEY]'
     }\` (Both \`Authorization: Bearer\` and \`x-api-key\` supported)`,
-    `- **Test Report Generated At:** \`${reportTime}\``,
-    `- **API Key Configured in Server Environment:** \`${
-      configStatus.apiKeyConfigured ? 'Yes' : 'No'
-    }\` (${configStatus.maskedStatus})`,
-    '- **Secret Hygiene:** Verified — no API keys or secret values are included in this report.',
+    `- **Report Generated At:** \`${reportTime}\``,
+    `- **Session Storage Model:** \`In-Memory React State Only (No database, no persistent browser storage, no server key storage)\``,
+    '- **Secret Hygiene:** Verified — all user API keys and authentication headers are redacted in this report.',
     '',
     '---',
     '',
@@ -330,8 +334,8 @@ export function generateTestReportMarkdown(
         `- **Timestamp:** \`${res.timestamp}\``,
         `- **HTTP Method:** \`${res.method}\``,
         `- **Exact URL:** \`${res.exactUrl}\``,
-        `- **Auth Format Used:** \`${res.authFormatUsed}\` (Server Key Configured: \`${
-          res.apiKeyConfiguredOnServer ? 'Yes' : 'No'
+        `- **Auth Format Used:** \`${res.authFormatUsed}\` (BYOK Per-Request Key Supplied: \`${
+          res.userKeySupplied ? 'Yes (Redacted)' : 'No (Unauthenticated Test)'
         }\`)`,
         `- **HTTP Status:** \`${res.httpStatus} (${res.statusText})\``,
         `- **Duration:** \`${res.durationMs} ms\``,
