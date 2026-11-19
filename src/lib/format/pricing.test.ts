@@ -256,6 +256,15 @@ describe('src/lib/format/pricing.ts', () => {
     it('formats contiguous off-peak UTC hours and keeps raw weekday indices', () => {
       const { utcHoursLabel } = formatOffpeakHoursUtc([16, 17, 18]);
       assert.equal(utcHoursLabel, '16:00–19:00 UTC');
+      const strRanges = formatOffpeakHoursUtc([
+        '00:00-01:00',
+        '04:00-06:00',
+        '10:00-00:00',
+      ]);
+      assert.equal(
+        strRanges.utcHoursLabel,
+        '00:00–01:00 UTC, 04:00–06:00 UTC, 10:00–00:00 UTC'
+      );
       assert.equal(
         formatOffpeakWeekdays([5, 6]),
         '[5, 6] — weekday index (convention unverified)'

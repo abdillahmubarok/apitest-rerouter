@@ -385,8 +385,61 @@ export function formatOffpeakHoursUtc(hoursUtc: unknown): {
     };
   }
 
+  const tzOffsetMinutes = -new Date().getTimezoneOffset();
+  const sign = tzOffsetMinutes >= 0 ? '+' : '-';
+  const absMins = Math.abs(tzOffsetMinutes);
+  const offsetH = Math.floor(absMins / 60);
+  const offsetM = absMins % 60;
+  const tzLabel =
+    offsetM === 0
+      ? `UTC${sign}${offsetH}`
+      : `UTC${sign}${offsetH}:${String(offsetM).padStart(2, '0')}`;
+
+  const toLocalTimeFromMins = (utcMinutes: number) => {
+    const totalMinutes =
+      (((utcMinutes + tzOffsetMinutes) % 1440) + 1440) % 1440;
+    const lh = Math.floor(totalMinutes / 60);
+    const lm = totalMinutes % 60;
+    return `${String(lh).padStart(2, '0')}:${String(lm).padStart(2, '0')}`;
+  };
+
+  // Case 1: Array of "HH:MM-HH:MM" strings (observed in live catalog on deepseek-flash / deepseek-v4-flash)
+  const stringRangeRegex = /^(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})$/;
+  if (
+    hoursUtc.every(
+      (h): h is string => typeof h === 'string' && stringRangeRegex.test(h.trim())
+    )
+  ) {
+    const utcParts: string[] = [];
+    const localParts: string[] = [];
+    for (const rawRange of hoursUtc) {
+      const m = rawRange.trim().match(stringRangeRegex);
+      if (!m) continue;
+      const h1 = Number.parseInt(m[1], 10);
+      const m1 = Number.parseInt(m[2], 10);
+      const h2 = Number.parseInt(m[3], 10);
+      const m2 = Number.parseInt(m[4], 10);
+      const s1 = `${String(h1).padStart(2, '0')}:${String(m1).padStart(2, '0')}`;
+      const s2 = `${String(h2).padStart(2, '0')}:${String(m2).padStart(2, '0')}`;
+      utcParts.push(`${s1}–${s2} UTC`);
+      localParts.push(
+        `${toLocalTimeFromMins(h1 * 60 + m1)}–${toLocalTimeFromMins(
+          h2 * 60 + m2
+        )}`
+      );
+    }
+    return {
+      utcHoursLabel: utcParts.join(', '),
+      localHoursLabel: `${localParts.join(', ')} (${tzLabel})`,
+    };
+  }
+
+  // Case 2: Array of integer UTC hours (e.g. [16] or [16, 17, 18])
   const numericHours = hoursUtc
-    .filter((h): h is number => typeof h === 'number' && Number.isInteger(h) && h >= 0 && h <= 23)
+    .filter(
+      (h): h is number =>
+        typeof h === 'number' && Number.isInteger(h) && h >= 0 && h <= 23
+    )
     .sort((a, b) => a - b);
 
   if (numericHours.length !== hoursUtc.length || numericHours.length === 0) {
@@ -414,26 +467,11 @@ export function formatOffpeakHoursUtc(hoursUtc: unknown): {
     (r) => `${pad2(r.start)}:00–${pad2(r.end)}:00 UTC`
   );
 
-  // Compute local timezone offset for visitor display
-  const tzOffsetMinutes = -new Date().getTimezoneOffset();
-  const sign = tzOffsetMinutes >= 0 ? '+' : '-';
-  const absMins = Math.abs(tzOffsetMinutes);
-  const offsetH = Math.floor(absMins / 60);
-  const offsetM = absMins % 60;
-  const tzLabel =
-    offsetM === 0
-      ? `UTC${sign}${offsetH}`
-      : `UTC${sign}${offsetH}:${String(offsetM).padStart(2, '0')}`;
-
-  const toLocalTimeStr = (utcHour: number) => {
-    const totalMinutes = ((utcHour * 60 + tzOffsetMinutes) % 1440 + 1440) % 1440;
-    const lh = Math.floor(totalMinutes / 60);
-    const lm = totalMinutes % 60;
-    return `${String(lh).padStart(2, '0')}:${String(lm).padStart(2, '0')}`;
-  };
-
   const localSegments = ranges.map(
-    (r) => `${toLocalTimeStr(r.start)}–${toLocalTimeStr(r.end)} (${tzLabel})`
+    (r) =>
+      `${toLocalTimeFromMins(r.start * 60)}–${toLocalTimeFromMins(
+        r.end * 60
+      )} (${tzLabel})`
   );
 
   return {
