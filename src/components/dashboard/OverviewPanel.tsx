@@ -33,6 +33,7 @@ import {
   OFFICIAL_DOCS_URL,
   useRerouterSession,
 } from '@/context/RerouterSessionContext';
+import { formatRequestCost } from '@/lib/format/pricing';
 import type {
   AuthFormat,
   CatalogAnalysis,
@@ -422,8 +423,8 @@ export function OverviewPanel({
             </div>
             <div className="font-mono text-xs font-semibold text-emerald-700 dark:text-emerald-400 mt-1.5">
               {latestWithCost
-                ? `$${latestWithCost.usageAndCost.costValue} (${latestWithCost.usageAndCost.costPath})`
-                : 'Not returned in executed tests'}
+                ? `${formatRequestCost(latestWithCost.usageAndCost.costValue)} (${latestWithCost.usageAndCost.costPath})`
+                : formatRequestCost(undefined)}
             </div>
           </div>
         </div>
@@ -557,6 +558,7 @@ export function OverviewPanel({
                 <TableHead>Method & URL</TableHead>
                 <TableHead>HTTP Status</TableHead>
                 <TableHead>Duration</TableHead>
+                <TableHead>Usage Cost</TableHead>
                 <TableHead>Summary / Error Classification</TableHead>
               </TableRow>
             </TableHeader>
@@ -583,6 +585,9 @@ export function OverviewPanel({
                   </TableCell>
                   <TableCell className="text-muted-foreground whitespace-nowrap">
                     {r.durationMs} ms
+                  </TableCell>
+                  <TableCell className="text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
+                    {formatRequestCost(r.usageAndCost.costValue)}
                   </TableCell>
                   <TableCell className="text-muted-foreground max-w-xs truncate">
                     {r.errorAnalysis

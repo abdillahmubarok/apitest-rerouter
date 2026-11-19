@@ -30,6 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { formatRequestCost } from '@/lib/format/pricing';
 import type { TestExecutionResult } from '@/lib/rerouter/types';
 
 interface TestResultViewProps {
@@ -124,10 +125,19 @@ export function TestResultView({ result }: TestResultViewProps) {
           <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
             Usage Cost (USD)
           </div>
-          <div className="font-mono text-xs font-medium text-emerald-700 dark:text-emerald-400 mt-0.5 truncate">
-            {result.usageAndCost.costValue !== null
-              ? `${result.usageAndCost.costValue} (${result.usageAndCost.costPath})`
-              : 'Not returned'}
+          <div
+            className="font-mono text-xs font-medium text-emerald-700 dark:text-emerald-400 mt-0.5 truncate"
+            title={
+              result.usageAndCost.costValue !== null &&
+              result.usageAndCost.costValue !== undefined
+                ? `Raw: ${String(result.usageAndCost.costValue)} USD (${result.usageAndCost.costPath})`
+                : 'Not reported by endpoint'
+            }
+          >
+            {result.usageAndCost.costValue !== null &&
+            result.usageAndCost.costValue !== undefined
+              ? `${formatRequestCost(result.usageAndCost.costValue)} (${result.usageAndCost.costPath})`
+              : formatRequestCost(undefined)}
           </div>
         </div>
         <div className="px-3 py-2">
@@ -301,7 +311,7 @@ export function TestResultView({ result }: TestResultViewProps) {
             </Button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-border rounded-md border border-border bg-background font-mono text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-border rounded-md border border-border bg-background font-mono text-xs">
             <div className="px-3 py-2">
               <span className="text-muted-foreground">[DONE] Marker: </span>
               <span
@@ -318,6 +328,17 @@ export function TestResultView({ result }: TestResultViewProps) {
               <span className="text-muted-foreground">Finish Reason: </span>
               <span className="text-sky-700 dark:text-sky-400 font-medium">
                 {result.streamInspection.finishReason ?? 'Not present'}
+              </span>
+            </div>
+            <div className="px-3 py-2">
+              <span className="text-muted-foreground">Final Chunk Cost: </span>
+              <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+                {formatRequestCost(
+                  typeof result.streamInspection.finalCost === 'number' ||
+                    typeof result.streamInspection.finalCost === 'string'
+                    ? result.streamInspection.finalCost
+                    : undefined
+                )}
               </span>
             </div>
             <div className="px-3 py-2">

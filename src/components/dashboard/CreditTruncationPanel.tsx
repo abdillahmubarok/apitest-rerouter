@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { formatRequestCost } from '@/lib/format/pricing';
 import type {
   CatalogAnalysis,
   TestExecutionResult,
@@ -530,18 +531,18 @@ export function CreditTruncationPanel({
                   {tokenLimitResult?.usageAndCost.rawUsageObject
                     ? `${JSON.stringify(
                         tokenLimitResult.usageAndCost.rawUsageObject
-                      )} (Cost: ${
-                        tokenLimitResult.usageAndCost.costValue ?? 'none'
-                      })`
+                      )} (Cost: ${formatRequestCost(
+                        tokenLimitResult.usageAndCost.costValue
+                      )})`
                     : 'N/A'}
                 </TableCell>
                 <TableCell className="text-emerald-700 dark:text-emerald-400">
                   {latestCreditResult?.usageAndCost.rawUsageObject
                     ? `${JSON.stringify(
                         latestCreditResult.usageAndCost.rawUsageObject
-                      )} (Cost: ${
-                        latestCreditResult.usageAndCost.costValue ?? 'none'
-                      })`
+                      )} (Cost: ${formatRequestCost(
+                        latestCreditResult.usageAndCost.costValue
+                      )})`
                     : 'N/A'}
                 </TableCell>
               </TableRow>

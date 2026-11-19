@@ -30,6 +30,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { compareCatalogSnapshots } from '@/lib/rerouter/inspect-models';
+import { formatPerTokenPrice } from '@/lib/format/pricing';
 import type {
   CatalogAnalysis,
   CatalogSnapshot,
@@ -588,10 +589,18 @@ export function ModelChangesPanel({
                               {d.fieldPath}
                             </TableCell>
                             <TableCell className="text-red-700 dark:text-red-400">
-                              {JSON.stringify(d.oldValue)}
+                              {d.category === 'pricing' &&
+                              typeof d.oldValue === 'string' &&
+                              !/threshold_tokens/i.test(d.fieldPath)
+                                ? `${formatPerTokenPrice(d.oldValue)} / 1M (raw: ${JSON.stringify(d.oldValue)})`
+                                : JSON.stringify(d.oldValue)}
                             </TableCell>
                             <TableCell className="text-emerald-700 dark:text-emerald-400">
-                              {JSON.stringify(d.newValue)}
+                              {d.category === 'pricing' &&
+                              typeof d.newValue === 'string' &&
+                              !/threshold_tokens/i.test(d.fieldPath)
+                                ? `${formatPerTokenPrice(d.newValue)} / 1M (raw: ${JSON.stringify(d.newValue)})`
+                                : JSON.stringify(d.newValue)}
                             </TableCell>
                           </TableRow>
                         ))}

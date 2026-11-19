@@ -28,6 +28,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
+import { formatRequestCost } from '@/lib/format/pricing';
 import { ENDPOINT_DEFINITIONS } from '@/lib/rerouter/endpoints';
 import type {
   AnalyzedModelItem,
@@ -636,10 +637,7 @@ export function EndpointTestPanel({
                     Generation Charge / Cost
                   </TableCell>
                   <TableCell className="text-foreground">
-                    {primaryResults[0]?.usageAndCost.costValue !== null &&
-                    primaryResults[0]?.usageAndCost.costValue !== undefined
-                      ? `$${primaryResults[0].usageAndCost.costValue}`
-                      : 'No cost field returned'}
+                    {formatRequestCost(primaryResults[0]?.usageAndCost.costValue)}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     N/A (HTTP 405)

@@ -1,3 +1,8 @@
+import {
+  extractModelPricingFromRaw,
+  formatPerTokenPrice,
+  formatRequestCost,
+} from '@/lib/format/pricing';
 import type {
   AuthFormat,
   CatalogAnalysis,
@@ -270,13 +275,18 @@ export function generateTestReportMarkdown(
       '',
       '### Embedding Models in Catalog & Dimension Metadata Audit',
       '',
-      '| Model ID | Provider (`owned_by`) | Mode | Context Length | Prompt Price (`pricing.prompt`) | Catalog-Declared Dimension |',
+      '| Model ID | Provider (`owned_by`) | Mode | Context Length | Prompt Price (Raw `pricing.prompt` / USD per 1M) | Catalog-Declared Dimension |',
       '|---|---|---|---|---|---|'
     );
 
     for (const em of catalogAnalysis.embeddingModels) {
+      const rawPrompt =
+        typeof em.inputTokenPrice === 'string'
+          ? em.inputTokenPrice
+          : String(em.inputTokenPrice ?? '');
+      const per1MPrompt = formatPerTokenPrice(em.inputTokenPrice);
       lines.push(
-        `| \`${em.modelId}\` | \`${em.provider}\` | \`${em.mode}\` | \`${em.contextLength}\` | \`${em.inputTokenPrice}\` | \`${
+        `| \`${em.modelId}\` | \`${em.provider}\` | \`${em.mode}\` | \`${em.contextLength}\` | \`${rawPrompt}\` (${per1MPrompt} / 1M) | \`${
           em.declaredEmbeddingDimension !== null
             ? em.declaredEmbeddingDimension
             : 'NOT PROVIDED BY MODEL CATALOG'
@@ -288,13 +298,60 @@ export function generateTestReportMarkdown(
       '',
       '### Decision Models in Catalog',
       '',
-      '| Model ID | Provider (`owned_by`) | Mode | Context Length | Prompt Price (`pricing.prompt`) |',
-      '|---|---|---|---|---|'
+      '| Model ID | Provider (`owned_by`) | Mode | Context Length | Prompt Price (Raw `pricing.prompt` / USD per 1M) | Completion Price (Raw `pricing.completion` / USD per 1M) |',
+      '|---|---|---|---|---|---|'
     );
 
     for (const dm of catalogAnalysis.decisionModels) {
+      const rawPrompt =
+        typeof dm.inputTokenPrice === 'string'
+          ? dm.inputTokenPrice
+          : String(dm.inputTokenPrice ?? '');
+      const per1MPrompt = formatPerTokenPrice(dm.inputTokenPrice);
+      const rawCompletion =
+        typeof dm.outputTokenPrice === 'string'
+          ? dm.outputTokenPrice
+          : String(dm.outputTokenPrice ?? '');
+      const per1MCompletion = formatPerTokenPrice(dm.outputTokenPrice);
       lines.push(
-        `| \`${dm.modelId}\` | \`${dm.provider}\` | \`${dm.mode}\` | \`${dm.contextLength}\` | \`${dm.inputTokenPrice}\` |`
+        `| \`${dm.modelId}\` | \`${dm.provider}\` | \`${dm.mode}\` | \`${dm.contextLength}\` | \`${rawPrompt}\` (${per1MPrompt} / 1M) | \`${rawCompletion}\` (${per1MCompletion} / 1M) |`
+      );
+    }
+
+    lines.push(
+      '',
+      '### Model Pricing Table (Raw USD/token Source of Truth & Formatted USD / 1M Tokens)',
+      '',
+      '| Model ID | Mode | Input / 1M (`pricing.prompt`) | Raw `pricing.prompt` | Output / 1M (`pricing.completion`) | Raw `pricing.completion` | Cache Read / 1M (`pricing.input_cache_read`) | Raw `pricing.input_cache_read` | Tiered Pricing |',
+      '|---|---|---|---|---|---|---|---|---|'
+    );
+
+    for (const m of catalogAnalysis.models) {
+      const p = extractModelPricingFromRaw(m.rawObject);
+      const inputPer1M = p.isFree ? 'FREE ($0.00)' : p.prompt.formattedPer1M;
+      const outputPer1M =
+        m.mode === 'embedding'
+          ? '— (Input only)'
+          : p.isFree
+            ? 'FREE ($0.00)'
+            : p.completion.formattedPer1M;
+      const cachePer1M =
+        p.inputCacheRead.status === 'valid' && !p.inputCacheRead.isZero
+          ? p.inputCacheRead.formattedPer1M
+          : '—';
+      const tiers: string[] = [];
+      if (p.longContext) {
+        tiers.push(
+          `Long context (${p.longContext.thresholdLabel}: In ${p.longContext.prompt.formattedPer1M}/1M, Out ${p.longContext.completion.formattedPer1M}/1M)`
+        );
+      }
+      if (p.offpeak) {
+        tiers.push(
+          `Off-peak (In ${p.offpeak.prompt.formattedPer1M}/1M, Out ${p.offpeak.completion.formattedPer1M}/1M)`
+        );
+      }
+      lines.push(
+        `| \`${m.modelId}\` | \`${m.mode}\` | **${inputPer1M}** | \`${p.prompt.rawString ?? '—'}\` | **${outputPer1M}** | \`${p.completion.rawString ?? '—'}\` | **${cachePer1M}** | \`${p.inputCacheRead.rawString ?? '—'}\` | ${tiers.length > 0 ? tiers.join('; ') : '—'} |`
       );
     }
 
@@ -349,11 +406,12 @@ export function generateTestReportMarkdown(
               ? `${res.usageAndCost.tokenCountField}: ${res.usageAndCost.tokenCountValue}`
               : 'Not present in response'
         }\``,
-        `- **Cost:** \`${
-          res.usageAndCost.costValue !== null
-            ? `${res.usageAndCost.costValue} (at ${res.usageAndCost.costPath})`
-            : 'Not present in response'
-        }\``,
+        `- **Cost:** \`${formatRequestCost(res.usageAndCost.costValue)}\`${
+          res.usageAndCost.costValue !== null &&
+          res.usageAndCost.costValue !== undefined
+            ? ` (raw: \`${String(res.usageAndCost.costValue)}\` at \`${res.usageAndCost.costPath}\`)`
+            : ''
+        }`,
         `- **Finish Reason:** \`${
           res.finishReason
             ? `${res.finishReason} (at ${res.finishReasonPath})`

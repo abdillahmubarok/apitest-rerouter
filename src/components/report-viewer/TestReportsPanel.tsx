@@ -17,6 +17,10 @@ import {
   useRerouterSession,
 } from '@/context/RerouterSessionContext';
 import {
+  extractModelPricingFromRaw,
+  formatRequestCost,
+} from '@/lib/format/pricing';
+import {
   DEFAULT_PRIVACY_QUESTIONS,
   generatePrivacyQuestionsMarkdown,
   generateTestReportMarkdown,
@@ -107,10 +111,45 @@ export function TestReportsPanel({
             providersFound: catalogAnalysis.providersFound,
             schemaSummary: catalogAnalysis.schemaSummary,
             prefixAnalysis: catalogAnalysis.prefixAnalysis,
+            modelPricing: catalogAnalysis.models.map((m) => {
+              const p = extractModelPricingFromRaw(m.rawObject);
+              return {
+                modelId: m.modelId,
+                mode: m.mode,
+                rawPricing: {
+                  prompt: p.prompt.rawValue ?? null,
+                  completion: p.completion.rawValue ?? null,
+                  input_cache_read: p.inputCacheRead.rawValue ?? null,
+                  pricing_long_context: p.longContext?.rawObject ?? null,
+                  pricing_offpeak: p.offpeak?.rawObject ?? null,
+                },
+                formattedPerMillion: {
+                  input: p.isFree ? 'FREE ($0.00)' : p.prompt.formattedPer1M,
+                  output:
+                    m.mode === 'embedding'
+                      ? '—'
+                      : p.isFree
+                        ? 'FREE ($0.00)'
+                        : p.completion.formattedPer1M,
+                  cacheRead:
+                    p.inputCacheRead.status === 'valid' &&
+                    !p.inputCacheRead.isZero
+                      ? p.inputCacheRead.formattedPer1M
+                      : '—',
+                  isFree: p.isFree,
+                },
+              };
+            }),
           }
         : null,
       totalTestsExecuted: testResults.length,
-      testResults,
+      testResults: testResults.map((r) => ({
+        ...r,
+        usageAndCost: {
+          ...r.usageAndCost,
+          formattedCost: formatRequestCost(r.usageAndCost.costValue),
+        },
+      })),
     };
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], {

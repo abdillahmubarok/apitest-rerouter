@@ -3,8 +3,13 @@
 import React, { useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   Check,
+  Clock,
   Database,
+  Layers,
   Play,
   RefreshCw,
   Search,
@@ -30,11 +35,33 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from '@/components/ui/toggle-group';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
+  compareNullablePricesForSort,
+  extractModelPricingFromRaw,
+  formatRequestCost,
+  type ExtractedLongContextPricing,
+  type ExtractedModelPricing,
+  type ExtractedOffpeakPricing,
+  type InspectedTokenPrice,
+} from '@/lib/format/pricing';
 import type {
   AnalyzedModelItem,
   CatalogAnalysis,
   TestExecutionResult,
 } from '@/lib/rerouter/types';
+
+export type PriceDisplayUnit = 'per_1m' | 'per_token';
+type PriceSortColumn = 'none' | 'input' | 'output' | 'cache';
+type SortDirection = 'asc' | 'desc';
 
 interface ModelCatalogPanelProps {
   catalogAnalysis: CatalogAnalysis | null;
@@ -43,6 +70,315 @@ interface ModelCatalogPanelProps {
   onRefreshModels: () => void;
   onExecuteEmbeddingDimensionTest: (modelId: string) => void;
   isLoading: boolean;
+}
+
+function LongContextBadge({
+  longContext,
+  priceUnit,
+}: {
+  longContext: ExtractedLongContextPricing;
+  priceUnit: PriceDisplayUnit;
+}) {
+  const formatTierPrice = (p: InspectedTokenPrice, isCache = false) => {
+    if (p.status !== 'valid') return '—';
+    if (priceUnit === 'per_token') return `${p.rawString} USD/token`;
+    if (isCache && p.isZero) return '—';
+    return `${p.formattedPer1M} / 1M`;
+  };
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={(e) => e.stopPropagation()}
+          className="inline-flex items-center focus:outline-none"
+        >
+          <Badge
+            variant="info"
+            className="text-[10px] px-1.5 py-0 gap-1 cursor-help"
+          >
+            <Layers className="h-2.5 w-2.5" />
+            <span>Long context</span>
+          </Badge>
+        </button>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs sm:max-w-sm p-3 space-y-2 font-mono text-xs">
+        <div className="font-sans font-semibold text-foreground border-b border-border pb-1 flex items-center justify-between gap-2">
+          <span>Long-Context Tiered Pricing</span>
+          <Badge variant="info" className="text-[10px] px-1.5 py-0">
+            {longContext.thresholdLabel}
+          </Badge>
+        </div>
+        <div className="space-y-1 text-[11px]">
+          <div className="flex justify-between gap-3">
+            <span className="text-muted-foreground">Threshold:</span>
+            <span className="text-foreground font-semibold">
+              {longContext.thresholdLabel}
+            </span>
+          </div>
+          <div className="flex justify-between gap-3">
+            <span className="text-muted-foreground">Input / 1M:</span>
+            <span className="text-emerald-700 dark:text-emerald-400">
+              {formatTierPrice(longContext.prompt)} (Raw:{' '}
+              {longContext.prompt.rawString ?? '—'})
+            </span>
+          </div>
+          <div className="flex justify-between gap-3">
+            <span className="text-muted-foreground">Output / 1M:</span>
+            <span className="text-amber-700 dark:text-amber-300">
+              {formatTierPrice(longContext.completion)} (Raw:{' '}
+              {longContext.completion.rawString ?? '—'})
+            </span>
+          </div>
+          <div className="flex justify-between gap-3">
+            <span className="text-muted-foreground">Cache Read / 1M:</span>
+            <span className="text-sky-700 dark:text-sky-400">
+              {formatTierPrice(longContext.inputCacheRead, true)} (Raw:{' '}
+              {longContext.inputCacheRead.rawString ?? '—'})
+            </span>
+          </div>
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function OffpeakBadge({
+  offpeak,
+  priceUnit,
+}: {
+  offpeak: ExtractedOffpeakPricing;
+  priceUnit: PriceDisplayUnit;
+}) {
+  const formatTierPrice = (p: InspectedTokenPrice, isCache = false) => {
+    if (p.status !== 'valid') return '—';
+    if (priceUnit === 'per_token') return `${p.rawString} USD/token`;
+    if (isCache && p.isZero) return '—';
+    return `${p.formattedPer1M} / 1M`;
+  };
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={(e) => e.stopPropagation()}
+          className="inline-flex items-center focus:outline-none"
+        >
+          <Badge
+            variant="purple"
+            className="text-[10px] px-1.5 py-0 gap-1 cursor-help"
+          >
+            <Clock className="h-2.5 w-2.5" />
+            <span>Off-peak</span>
+          </Badge>
+        </button>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs sm:max-w-md p-3 space-y-2 font-mono text-xs">
+        <div className="font-sans font-semibold text-foreground border-b border-border pb-1">
+          Off-Peak Discount Pricing & Windows
+        </div>
+        <div className="space-y-1 text-[11px]">
+          <div className="flex justify-between gap-3">
+            <span className="text-muted-foreground">Off-peak Input / 1M:</span>
+            <span className="text-emerald-700 dark:text-emerald-400">
+              {formatTierPrice(offpeak.prompt)} (Raw:{' '}
+              {offpeak.prompt.rawString ?? '—'})
+            </span>
+          </div>
+          <div className="flex justify-between gap-3">
+            <span className="text-muted-foreground">Off-peak Output / 1M:</span>
+            <span className="text-amber-700 dark:text-amber-300">
+              {formatTierPrice(offpeak.completion)} (Raw:{' '}
+              {offpeak.completion.rawString ?? '—'})
+            </span>
+          </div>
+          <div className="flex justify-between gap-3">
+            <span className="text-muted-foreground">
+              Off-peak Cache Read / 1M:
+            </span>
+            <span className="text-sky-700 dark:text-sky-400">
+              {formatTierPrice(offpeak.inputCacheRead, true)} (Raw:{' '}
+              {offpeak.inputCacheRead.rawString ?? '—'})
+            </span>
+          </div>
+        </div>
+        {offpeak.windows.length > 0 && (
+          <div className="pt-1.5 border-t border-border space-y-1.5 text-[11px]">
+            <div className="font-sans font-medium text-foreground">
+              Off-Peak Windows ({offpeak.windows.length}):
+            </div>
+            {offpeak.windows.map((w, idx) => (
+              <div
+                key={idx}
+                className="rounded border border-border bg-muted/30 p-1.5 space-y-0.5"
+              >
+                <div>
+                  <span className="text-muted-foreground">UTC Hours: </span>
+                  <span className="text-foreground font-semibold">
+                    {w.utcHoursLabel}
+                  </span>{' '}
+                  <span className="text-muted-foreground">
+                    (raw hours_utc: {JSON.stringify(w.rawHoursUtc)})
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Local Time: </span>
+                  <span className="text-sky-700 dark:text-sky-400">
+                    {w.localHoursLabel}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Weekdays: </span>
+                  <span className="text-amber-700 dark:text-amber-300">
+                    {w.weekdaysLabel}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function PriceValueDisplay({
+  price,
+  priceUnit,
+  isFreeModel,
+  isEmbeddingOutput,
+  isCacheRead,
+  colorClass,
+}: {
+  price: InspectedTokenPrice;
+  priceUnit: PriceDisplayUnit;
+  isFreeModel?: boolean;
+  isEmbeddingOutput?: boolean;
+  isCacheRead?: boolean;
+  colorClass: string;
+}) {
+  if (isEmbeddingOutput && priceUnit === 'per_1m') {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="text-muted-foreground cursor-help select-none">
+            —
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="font-mono text-xs">
+          Embedding models bill input tokens only
+          {price.rawString ? ` (Raw: ${price.rawString} USD/token)` : ''}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  if (price.status === 'missing') {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="text-muted-foreground cursor-help select-none">
+            —
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="font-mono text-xs">
+          Not provided by catalog
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  if (price.status === 'unparseable') {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400 cursor-help">
+            <span>—</span>
+            <AlertTriangle
+              className="h-3.5 w-3.5 shrink-0"
+              aria-label={price.tooltip}
+            />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="font-mono text-xs">
+          {price.tooltip}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  // Valid decimal price
+  if (priceUnit === 'per_token') {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            className={`inline-flex items-center gap-1.5 cursor-help ${colorClass}`}
+          >
+            <span>{price.rawString}</span>
+            {isFreeModel && !isCacheRead && (
+              <Badge variant="success" className="text-[10px] px-1.5 py-0">
+                FREE
+              </Badge>
+            )}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="font-mono text-xs">
+          {isEmbeddingOutput
+            ? `Embedding models bill input tokens only (Raw: ${price.rawString} USD/token)`
+            : `${price.tooltip} (${price.formattedPer1M} / 1M)`}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  // Per 1M tokens mode
+  if (isCacheRead && price.isZero) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="text-muted-foreground cursor-help select-none">
+            —
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="font-mono text-xs">
+          {price.tooltip}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  if (isFreeModel && !isCacheRead) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex items-center gap-1.5 cursor-help">
+            <Badge variant="success" className="text-[10px] px-1.5 py-0">
+              FREE
+            </Badge>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="font-mono text-xs">
+          {price.tooltip}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className={`cursor-help ${colorClass}`}>
+          {price.formattedPer1M}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="font-mono text-xs">
+        {price.tooltip}
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 export function ModelCatalogPanel({
@@ -60,6 +396,11 @@ export function ModelCatalogPanel({
   const [reasoningFilter, setReasoningFilter] = useState<string>('all');
   const [selectedModelIndex, setSelectedModelIndex] = useState<number>(0);
 
+  // React state only (no browser storage) for price unit toggle & price sorting
+  const [priceUnit, setPriceUnit] = useState<PriceDisplayUnit>('per_1m');
+  const [sortColumn, setSortColumn] = useState<PriceSortColumn>('none');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
   const defaultEmbeddingModelId =
     catalogAnalysis?.embeddingModels[0]?.modelId ??
     'gemini/gemini-embedding-001';
@@ -68,9 +409,31 @@ export function ModelCatalogPanel({
   );
   const [kbDimensionInput, setKbDimensionInput] = useState<string>('1536');
 
+  // Pre-compute extracted pricing at render time without mutating raw model objects
+  const modelPricingMap = useMemo(() => {
+    const map = new Map<number, ExtractedModelPricing>();
+    if (!catalogAnalysis) return map;
+    for (const m of catalogAnalysis.models) {
+      map.set(m.index, extractModelPricingFromRaw(m.rawObject));
+    }
+    return map;
+  }, [catalogAnalysis]);
+
+  const handleToggleSort = (column: Exclude<PriceSortColumn, 'none'>) => {
+    if (sortColumn !== column) {
+      setSortColumn(column);
+      setSortDirection('asc');
+    } else if (sortDirection === 'asc') {
+      setSortDirection('desc');
+    } else {
+      setSortColumn('none');
+      setSortDirection('asc');
+    }
+  };
+
   const filteredModels = useMemo(() => {
     if (!catalogAnalysis) return [];
-    return catalogAnalysis.models.filter((m) => {
+    const base = catalogAnalysis.models.filter((m) => {
       if (modeFilter !== 'all' && m.mode !== modeFilter) return false;
       if (
         providerFilter !== 'all' &&
@@ -94,6 +457,46 @@ export function ModelCatalogPanel({
       }
       return true;
     });
+
+    if (sortColumn === 'none') {
+      return base;
+    }
+
+    return [...base].sort((a, b) => {
+      const pA = modelPricingMap.get(a.index);
+      const pB = modelPricingMap.get(b.index);
+
+      if (sortColumn === 'input') {
+        return compareNullablePricesForSort(
+          pA?.prompt.rawString ?? null,
+          pB?.prompt.rawString ?? null,
+          sortDirection
+        );
+      }
+
+      if (sortColumn === 'output') {
+        const valA =
+          a.mode === 'embedding' && priceUnit === 'per_1m'
+            ? null
+            : (pA?.completion.rawString ?? null);
+        const valB =
+          b.mode === 'embedding' && priceUnit === 'per_1m'
+            ? null
+            : (pB?.completion.rawString ?? null);
+        return compareNullablePricesForSort(valA, valB, sortDirection);
+      }
+
+      // cache column
+      const valA =
+        priceUnit === 'per_1m' && pA?.inputCacheRead.isZero
+          ? null
+          : (pA?.inputCacheRead.rawString ?? null);
+      const valB =
+        priceUnit === 'per_1m' && pB?.inputCacheRead.isZero
+          ? null
+          : (pB?.inputCacheRead.rawString ?? null);
+      return compareNullablePricesForSort(valA, valB, sortDirection);
+    });
   }, [
     catalogAnalysis,
     modeFilter,
@@ -101,12 +504,21 @@ export function ModelCatalogPanel({
     visionFilter,
     reasoningFilter,
     searchQuery,
+    sortColumn,
+    sortDirection,
+    modelPricingMap,
+    priceUnit,
   ]);
 
   const inspectedModel: AnalyzedModelItem | null =
     catalogAnalysis?.models[selectedModelIndex] ??
     catalogAnalysis?.models[0] ??
     null;
+
+  const inspectedModelPricing: ExtractedModelPricing | null = inspectedModel
+    ? (modelPricingMap.get(inspectedModel.index) ??
+      extractModelPricingFromRaw(inspectedModel.rawObject))
+    : null;
 
   const latestEmbeddingResultForSelected = useMemo(() => {
     return (
@@ -122,6 +534,17 @@ export function ModelCatalogPanel({
   const verifiedActualDim =
     latestEmbeddingResultForSelected?.embeddingVerification
       ?.actualVectorDimension ?? null;
+
+  const renderSortIcon = (column: Exclude<PriceSortColumn, 'none'>) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="h-3 w-3 opacity-50" />;
+    }
+    return sortDirection === 'asc' ? (
+      <ArrowUp className="h-3 w-3 text-sky-600 dark:text-sky-400" />
+    ) : (
+      <ArrowDown className="h-3 w-3 text-sky-600 dark:text-sky-400" />
+    );
+  };
 
   return (
     <div className="space-y-4">
@@ -139,7 +562,8 @@ export function ModelCatalogPanel({
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
             Live discovery of exact JSON field paths, data types, capabilities,
-            pricing structures, and embedding vector dimensions.
+            human-readable USD / 1M token pricing structures, and embedding
+            vector dimensions.
           </p>
         </div>
         <Button
@@ -332,37 +756,60 @@ export function ModelCatalogPanel({
                     <TableHead>Exact Model ID</TableHead>
                     <TableHead>Provider (owned_by)</TableHead>
                     <TableHead>Context Length</TableHead>
-                    <TableHead>Prompt Price (pricing.prompt)</TableHead>
+                    <TableHead>
+                      Input / 1M (USD / 1M tokens · pricing.prompt)
+                    </TableHead>
+                    <TableHead>
+                      Output / 1M (USD / 1M tokens · pricing.completion)
+                    </TableHead>
                     <TableHead>Catalog-Declared Embedding Dimension</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {catalogAnalysis.embeddingModels.map((em) => (
-                    <TableRow key={em.modelId}>
-                      <TableCell className="text-muted-foreground">
-                        {em.basePath}
-                      </TableCell>
-                      <TableCell className="text-sky-700 dark:text-sky-400 font-semibold">
-                        {em.modelId}
-                      </TableCell>
-                      <TableCell className="text-foreground">
-                        {em.provider}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {String(em.contextLength)}
-                      </TableCell>
-                      <TableCell className="text-emerald-700 dark:text-emerald-400">
-                        {String(em.inputTokenPrice)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="warning">
-                          {em.declaredEmbeddingDimension !== null
-                            ? `${em.declaredEmbeddingDimension} (${em.declaredEmbeddingDimensionPath})`
-                            : 'NOT PROVIDED BY MODEL CATALOG'}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {catalogAnalysis.embeddingModels.map((em) => {
+                    const emPricing =
+                      modelPricingMap.get(em.index) ??
+                      extractModelPricingFromRaw(em.rawObject);
+                    return (
+                      <TableRow key={em.modelId}>
+                        <TableCell className="text-muted-foreground">
+                          {em.basePath}
+                        </TableCell>
+                        <TableCell className="text-sky-700 dark:text-sky-400 font-semibold">
+                          {em.modelId}
+                        </TableCell>
+                        <TableCell className="text-foreground">
+                          {em.provider}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {String(em.contextLength)}
+                        </TableCell>
+                        <TableCell>
+                          <PriceValueDisplay
+                            price={emPricing.prompt}
+                            priceUnit={priceUnit}
+                            isFreeModel={emPricing.isFree}
+                            colorClass="text-emerald-700 dark:text-emerald-400 font-semibold"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <PriceValueDisplay
+                            price={emPricing.completion}
+                            priceUnit={priceUnit}
+                            isEmbeddingOutput
+                            colorClass="text-amber-700 dark:text-amber-300"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="warning">
+                            {em.declaredEmbeddingDimension !== null
+                              ? `${em.declaredEmbeddingDimension} (${em.declaredEmbeddingDimensionPath})`
+                              : 'NOT PROVIDED BY MODEL CATALOG'}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -487,8 +934,10 @@ export function ModelCatalogPanel({
                         Cost in USD:
                       </span>
                       <span className="text-emerald-700 dark:text-emerald-400">
-                        {latestEmbeddingResultForSelected.embeddingVerification
-                          .costUsd ?? 'Not returned'}
+                        {formatRequestCost(
+                          latestEmbeddingResultForSelected.embeddingVerification
+                            .costUsd
+                        )}
                       </span>
                     </div>
                   </div>
@@ -603,14 +1052,46 @@ export function ModelCatalogPanel({
 
           {/* Section 3: Interactive Model Catalog Table + Per-Model Recursive Field Inspector */}
           <div className="rounded-md border border-border bg-card overflow-hidden">
-            <div className="px-4 py-3 border-b border-border bg-muted/20 flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-xs font-semibold text-foreground">
-                3. Interactive Model Catalog Table ({filteredModels.length} of{' '}
-                {catalogAnalysis.totalModels} models)
-              </h3>
-              <span className="text-xs text-muted-foreground">
-                Click any row to inspect its exact recursive JSON paths below.
-              </span>
+            <div className="px-4 py-3 border-b border-border bg-muted/20 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-xs font-semibold text-foreground">
+                  3. Interactive Model Catalog Table ({filteredModels.length} of{' '}
+                  {catalogAnalysis.totalModels} models)
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Prices displayed in{' '}
+                  <strong className="text-foreground">
+                    {priceUnit === 'per_1m'
+                      ? 'USD / 1M tokens'
+                      : 'Raw USD / token (API strings unchanged)'}
+                  </strong>
+                  . Hover any price for exact raw USD/token value, or click
+                  price column headers to sort numerically.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-mono text-muted-foreground">
+                  Pricing Unit:
+                </span>
+                <ToggleGroup
+                  type="single"
+                  value={priceUnit}
+                  onValueChange={(val) =>
+                    setPriceUnit(
+                      val === 'per_token' ? 'per_token' : 'per_1m'
+                    )
+                  }
+                  aria-label="Pricing display unit"
+                >
+                  <ToggleGroupItem value="per_1m">
+                    Per 1M tokens
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="per_token">
+                    Per token (raw)
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              </div>
             </div>
 
             {/* Filter Bar */}
@@ -667,9 +1148,9 @@ export function ModelCatalogPanel({
               </NativeSelect>
             </div>
 
-            <div className="max-h-96 overflow-auto border-b border-border">
+            <div className="max-h-[480px] overflow-auto border-b border-border">
               <Table className="font-mono">
-                <TableHeader className="sticky top-0 bg-muted">
+                <TableHeader className="sticky top-0 z-10 bg-muted">
                   <TableRow>
                     <TableHead>Path</TableHead>
                     <TableHead>id (Exact)</TableHead>
@@ -678,13 +1159,91 @@ export function ModelCatalogPanel({
                     <TableHead>context_length</TableHead>
                     <TableHead>supports_vision</TableHead>
                     <TableHead>supports_reasoning</TableHead>
-                    <TableHead>pricing.prompt</TableHead>
-                    <TableHead>pricing.completion</TableHead>
+                    <TableHead>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleSort('input')}
+                            className="inline-flex items-center gap-1 text-left font-medium hover:text-foreground cursor-pointer"
+                          >
+                            <span>
+                              {priceUnit === 'per_1m'
+                                ? 'Input / 1M'
+                                : 'Input (Raw)'}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground font-normal">
+                              ({priceUnit === 'per_1m' ? 'USD / 1M tokens' : 'USD / token'})
+                            </span>
+                            {renderSortIcon('input')}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent className="font-mono text-xs">
+                          Source: pricing.prompt · Unit: USD / 1M tokens (Click
+                          to sort by numeric decimal price)
+                        </TooltipContent>
+                      </Tooltip>
+                    </TableHead>
+                    <TableHead>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleSort('output')}
+                            className="inline-flex items-center gap-1 text-left font-medium hover:text-foreground cursor-pointer"
+                          >
+                            <span>
+                              {priceUnit === 'per_1m'
+                                ? 'Output / 1M'
+                                : 'Output (Raw)'}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground font-normal">
+                              ({priceUnit === 'per_1m' ? 'USD / 1M tokens' : 'USD / token'})
+                            </span>
+                            {renderSortIcon('output')}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent className="font-mono text-xs">
+                          Source: pricing.completion · Unit: USD / 1M tokens
+                          (Click to sort by numeric decimal price)
+                        </TooltipContent>
+                      </Tooltip>
+                    </TableHead>
+                    <TableHead>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleSort('cache')}
+                            className="inline-flex items-center gap-1 text-left font-medium hover:text-foreground cursor-pointer"
+                          >
+                            <span>
+                              {priceUnit === 'per_1m'
+                                ? 'Cache Read / 1M'
+                                : 'Cache Read (Raw)'}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground font-normal">
+                              ({priceUnit === 'per_1m' ? 'USD / 1M tokens' : 'USD / token'})
+                            </span>
+                            {renderSortIcon('cache')}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent className="font-mono text-xs">
+                          Source: pricing.input_cache_read · Unit: USD / 1M
+                          tokens (Shows — if zero or absent)
+                        </TooltipContent>
+                      </Tooltip>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredModels.map((m) => {
                     const isSelected = m.index === selectedModelIndex;
+                    const pricing =
+                      modelPricingMap.get(m.index) ??
+                      extractModelPricingFromRaw(m.rawObject);
+                    const isEmbedding = m.mode === 'embedding';
+
                     return (
                       <TableRow
                         key={m.modelId}
@@ -698,7 +1257,17 @@ export function ModelCatalogPanel({
                           {m.basePath}
                         </TableCell>
                         <TableCell className="text-sky-700 dark:text-sky-400 font-semibold">
-                          {m.modelId}
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span>{m.modelId}</span>
+                            {pricing.isFree && (
+                              <Badge
+                                variant="success"
+                                className="text-[10px] px-1.5 py-0"
+                              >
+                                FREE
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-foreground">
                           {m.provider || '""'}
@@ -742,11 +1311,44 @@ export function ModelCatalogPanel({
                             {String(m.thinkingSupport)}
                           </span>
                         </TableCell>
-                        <TableCell className="text-emerald-700 dark:text-emerald-400">
-                          {String(m.inputTokenPrice)}
+                        <TableCell>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <PriceValueDisplay
+                              price={pricing.prompt}
+                              priceUnit={priceUnit}
+                              isFreeModel={pricing.isFree}
+                              colorClass="text-emerald-700 dark:text-emerald-400 font-medium"
+                            />
+                            {pricing.longContext && (
+                              <LongContextBadge
+                                longContext={pricing.longContext}
+                                priceUnit={priceUnit}
+                              />
+                            )}
+                            {pricing.offpeak && (
+                              <OffpeakBadge
+                                offpeak={pricing.offpeak}
+                                priceUnit={priceUnit}
+                              />
+                            )}
+                          </div>
                         </TableCell>
-                        <TableCell className="text-amber-700 dark:text-amber-300">
-                          {String(m.outputTokenPrice)}
+                        <TableCell>
+                          <PriceValueDisplay
+                            price={pricing.completion}
+                            priceUnit={priceUnit}
+                            isFreeModel={pricing.isFree}
+                            isEmbeddingOutput={isEmbedding}
+                            colorClass="text-amber-700 dark:text-amber-300 font-medium"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <PriceValueDisplay
+                            price={pricing.inputCacheRead}
+                            priceUnit={priceUnit}
+                            isCacheRead
+                            colorClass="text-sky-700 dark:text-sky-400 font-medium"
+                          />
                         </TableCell>
                       </TableRow>
                     );
@@ -755,8 +1357,236 @@ export function ModelCatalogPanel({
               </Table>
             </div>
 
-            {inspectedModel && (
-              <div className="p-3.5 bg-background/20">
+            {inspectedModel && inspectedModelPricing && (
+              <div className="p-3.5 bg-background/20 space-y-3">
+                {/* Selected Model Pricing & Tiered Pricing Summary Strip */}
+                <div className="rounded-md border border-border bg-card p-3 space-y-2.5 font-mono text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-sans font-semibold text-foreground">
+                        Selected Model Pricing Summary:
+                      </span>
+                      <code className="text-sky-700 dark:text-sky-400 font-semibold">
+                        {inspectedModel.modelId}
+                      </code>
+                      <Badge variant="outline" className="text-[10px]">
+                        mode: {inspectedModel.mode}
+                      </Badge>
+                      {inspectedModelPricing.isFree && (
+                        <Badge variant="success" className="text-[10px]">
+                          FREE
+                        </Badge>
+                      )}
+                    </div>
+                    <span className="text-[11px] text-muted-foreground">
+                      Raw JSON below remains unmodified
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-border rounded border border-border bg-muted/20">
+                    <div className="px-3 py-2">
+                      <div className="text-[10px] text-muted-foreground uppercase">
+                        Input / 1M (pricing.prompt)
+                      </div>
+                      <div className="text-emerald-700 dark:text-emerald-400 font-semibold mt-0.5">
+                        {inspectedModelPricing.isFree
+                          ? '$0.00 / 1M (FREE)'
+                          : `${inspectedModelPricing.prompt.formattedPer1M} / 1M`}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {inspectedModelPricing.prompt.tooltip}
+                      </div>
+                    </div>
+                    <div className="px-3 py-2">
+                      <div className="text-[10px] text-muted-foreground uppercase">
+                        Output / 1M (pricing.completion)
+                      </div>
+                      <div className="text-amber-700 dark:text-amber-300 font-semibold mt-0.5">
+                        {inspectedModel.mode === 'embedding'
+                          ? '— (Embedding models bill input tokens only)'
+                          : inspectedModelPricing.isFree
+                            ? '$0.00 / 1M (FREE)'
+                            : `${inspectedModelPricing.completion.formattedPer1M} / 1M`}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {inspectedModelPricing.completion.tooltip}
+                      </div>
+                    </div>
+                    <div className="px-3 py-2">
+                      <div className="text-[10px] text-muted-foreground uppercase">
+                        Cache Read / 1M (pricing.input_cache_read)
+                      </div>
+                      <div className="text-sky-700 dark:text-sky-400 font-semibold mt-0.5">
+                        {inspectedModelPricing.inputCacheRead.status ===
+                          'valid' &&
+                        !inspectedModelPricing.inputCacheRead.isZero
+                          ? `${inspectedModelPricing.inputCacheRead.formattedPer1M} / 1M`
+                          : '—'}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {inspectedModelPricing.inputCacheRead.tooltip}
+                      </div>
+                    </div>
+                  </div>
+
+                  {(inspectedModelPricing.longContext ||
+                    inspectedModelPricing.offpeak) && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1">
+                      {inspectedModelPricing.longContext && (
+                        <div className="rounded border border-blue-500/30 bg-blue-500/5 p-2.5 space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <Badge variant="info" className="text-[10px]">
+                              Long context
+                            </Badge>
+                            <span className="text-[11px] font-semibold text-foreground">
+                              {inspectedModelPricing.longContext.thresholdLabel}
+                            </span>
+                          </div>
+                          <div className="text-[11px] space-y-0.5 pt-1">
+                            <div>
+                              Input:{' '}
+                              <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
+                                {
+                                  inspectedModelPricing.longContext.prompt
+                                    .formattedPer1M
+                                }{' '}
+                                / 1M
+                              </span>{' '}
+                              <span className="text-muted-foreground">
+                                (
+                                {
+                                  inspectedModelPricing.longContext.prompt
+                                    .tooltip
+                                }
+                                )
+                              </span>
+                            </div>
+                            <div>
+                              Output:{' '}
+                              <span className="text-amber-700 dark:text-amber-300 font-semibold">
+                                {
+                                  inspectedModelPricing.longContext.completion
+                                    .formattedPer1M
+                                }{' '}
+                                / 1M
+                              </span>{' '}
+                              <span className="text-muted-foreground">
+                                (
+                                {
+                                  inspectedModelPricing.longContext.completion
+                                    .tooltip
+                                }
+                                )
+                              </span>
+                            </div>
+                            <div>
+                              Cache Read:{' '}
+                              <span className="text-sky-700 dark:text-sky-400 font-semibold">
+                                {inspectedModelPricing.longContext
+                                  .inputCacheRead.status === 'valid' &&
+                                !inspectedModelPricing.longContext
+                                  .inputCacheRead.isZero
+                                  ? `${inspectedModelPricing.longContext.inputCacheRead.formattedPer1M} / 1M`
+                                  : '—'}
+                              </span>{' '}
+                              <span className="text-muted-foreground">
+                                (
+                                {
+                                  inspectedModelPricing.longContext
+                                    .inputCacheRead.tooltip
+                                }
+                                )
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {inspectedModelPricing.offpeak && (
+                        <div className="rounded border border-purple-500/30 bg-purple-500/5 p-2.5 space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <Badge variant="purple" className="text-[10px]">
+                              Off-peak
+                            </Badge>
+                            <span className="text-[11px] text-muted-foreground">
+                              {inspectedModelPricing.offpeak.windows.length}{' '}
+                              window(s)
+                            </span>
+                          </div>
+                          <div className="text-[11px] space-y-0.5 pt-1">
+                            <div>
+                              Input:{' '}
+                              <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
+                                {
+                                  inspectedModelPricing.offpeak.prompt
+                                    .formattedPer1M
+                                }{' '}
+                                / 1M
+                              </span>{' '}
+                              <span className="text-muted-foreground">
+                                ({inspectedModelPricing.offpeak.prompt.tooltip})
+                              </span>
+                            </div>
+                            <div>
+                              Output:{' '}
+                              <span className="text-amber-700 dark:text-amber-300 font-semibold">
+                                {
+                                  inspectedModelPricing.offpeak.completion
+                                    .formattedPer1M
+                                }{' '}
+                                / 1M
+                              </span>{' '}
+                              <span className="text-muted-foreground">
+                                (
+                                {
+                                  inspectedModelPricing.offpeak.completion
+                                    .tooltip
+                                }
+                                )
+                              </span>
+                            </div>
+                            <div>
+                              Cache Read:{' '}
+                              <span className="text-sky-700 dark:text-sky-400 font-semibold">
+                                {inspectedModelPricing.offpeak.inputCacheRead
+                                  .status === 'valid' &&
+                                !inspectedModelPricing.offpeak.inputCacheRead
+                                  .isZero
+                                  ? `${inspectedModelPricing.offpeak.inputCacheRead.formattedPer1M} / 1M`
+                                  : '—'}
+                              </span>{' '}
+                              <span className="text-muted-foreground">
+                                (
+                                {
+                                  inspectedModelPricing.offpeak.inputCacheRead
+                                    .tooltip
+                                }
+                                )
+                              </span>
+                            </div>
+                            {inspectedModelPricing.offpeak.windows.map(
+                              (w, idx) => (
+                                <div
+                                  key={idx}
+                                  className="pt-1 mt-1 border-t border-border/60"
+                                >
+                                  <div>
+                                    UTC: <strong>{w.utcHoursLabel}</strong> ·
+                                    Local: {w.localHoursLabel}
+                                  </div>
+                                  <div className="text-amber-700 dark:text-amber-300">
+                                    Weekdays: {w.weekdaysLabel}
+                                  </div>
+                                </div>
+                              )
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <JsonViewer
                   title={`Recursive JSON Field Inspector for ${inspectedModel.basePath} (${inspectedModel.modelId})`}
                   data={inspectedModel.rawObject}
